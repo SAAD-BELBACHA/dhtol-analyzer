@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 
@@ -65,6 +68,41 @@ class GlitchEvent:
 
 
 @dataclass
+class OvenplanEntry:
+    controller_id: int
+    position: int
+    zone: Zone
+    dut_name: str
+    hw_target: str
+    load_board: str = ""
+    dut_board: str = ""
+    uc_fsm: str = ""
+
+
+@dataclass
+class ParsedConfig:
+    test_name: str
+    zone: Optional[Zone]
+    temp_mode: TempMode
+    instruments: list[str] = field(default_factory=list)
+    ovenplan_entries: list[OvenplanEntry] = field(default_factory=list)
+    source_path: Optional[Path] = None
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BoardMetadata:
+    log_stress_seconds: float = 0.0
+    cycles: int = 0
+    hostname: str = ""
+    ip_address: str = ""
+    mac_address: str = ""
+    hardware_version: str = ""
+    firmware_version: str = ""
+    source_path: Optional[Path] = None
+
+
+@dataclass
 class Board:
     controller_id: int
     zone: Zone
@@ -78,6 +116,10 @@ class Board:
     glitches: list[GlitchEvent] = field(default_factory=list)
     t0_sensor_dead: bool = False
     t1_sensor_dead: bool = False
+    metadata: Optional[BoardMetadata] = None
+    data_path: Optional[Path] = None
+    log_paths: list[Path] = field(default_factory=list)
+    mqtt_paths: list[Path] = field(default_factory=list)
 
 # Prüft: Gibt es mindestens einen echten Fehler?
     
@@ -95,6 +137,9 @@ class ZoneData:
     zone: Zone
     boards: list[Board] = field(default_factory=list)
     total_current_series: object = None
+    psu_paths: list[Path] = field(default_factory=list)
+    el_paths: list[Path] = field(default_factory=list)
+    host_log_paths: list[Path] = field(default_factory=list)
 
 
 @dataclass
@@ -104,6 +149,8 @@ class TestRun:
     oven_temp_setpoint_c: float
     slot_nenn_strom_a: float
     zones: list[ZoneData] = field(default_factory=list)
+    root_path: Optional[Path] = None
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def all_boards(self) -> list[Board]:
