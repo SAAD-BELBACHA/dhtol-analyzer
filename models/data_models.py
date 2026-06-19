@@ -20,15 +20,16 @@ class Zone(Enum):
 
 
 class Status(Enum):
-    GREEN = "ok"
-    ORANGE = "warning"
-    RED = "fault"
+    GREEN = "ok" # alles normal
+    ORANGE = "warning" # OC, Entscheidung noch offen , T1-Sensor liefert falsche Werte.
+    RED = "fault"   #  OC als echter Ausfall bestätigt
 
 
 class TempMode(Enum):
     HV = "HVoltage"
     MV = "MVoltage"
 
+# beschreibt genau neine board log messung 
 
 @dataclass
 class Measurement:
@@ -44,6 +45,7 @@ class Measurement:
     t0_glitch: bool = False
     t1_glitch: bool = False
 
+# none = entscheidung offen , true = echter fehler , false = Scheinfehler
 
 @dataclass
 class Fault:
@@ -52,6 +54,7 @@ class Fault:
     is_real: Optional[bool] = None
     decided_by: str = "pending"
 
+#temp grund wann was 
 
 @dataclass
 class GlitchEvent:
@@ -76,6 +79,8 @@ class Board:
     t0_sensor_dead: bool = False
     t1_sensor_dead: bool = False
 
+# Prüft: Gibt es mindestens einen echten Fehler?
+    
     @property
     def status(self) -> Status:
         if any(fault.is_real for fault in self.faults):
