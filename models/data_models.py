@@ -69,7 +69,7 @@ class GlitchEvent:
 
 @dataclass
 class OvenplanEntry:
-    controller_id: int
+    controller_id: Optional[int]
     position: int
     zone: Zone
     dut_name: str
@@ -104,7 +104,7 @@ class BoardMetadata:
 
 @dataclass
 class Board:
-    controller_id: int
+    controller_id: Optional[int]
     zone: Zone
     position: int
     dut_name: str

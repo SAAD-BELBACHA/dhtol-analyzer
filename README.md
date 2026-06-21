@@ -2,9 +2,9 @@
 
 Lernprojekt zur automatischen Auswertung von DHTOL-Testläufen.
 
-## Aktueller Stand: Woche 1
+## Aktueller Stand: Woche 2
 
-Fundament fertig:
+Fundament und Dateiparser fertig:
 
 - gemeinsame Datenmodelle
 - Statusmodell Grün/Gelb/Rot
@@ -12,8 +12,15 @@ Fundament fertig:
 - Berechnung der Nachbelastungszeit
 - zentrale Konfigurationswerte
 - Unterstützung für 1–3 Zonen mit jeweils bis zu 8 Boards
+- JSON-Testkonfiguration und Ovenplan
+- automatische HV-/MV-Erkennung über `f_MV`
+- geplante Testzeit aus MTPX
+- Board-Laufzeit und Hardwaredaten aus DATA
 
-Ausführliche Erklärung: [Woche 1 – Fundament](docs/week-01-foundation.md)
+Dokumentation:
+
+- [Woche 1 – Fundament](docs/week-01-foundation.md)
+- [Woche 2 – Konfigurations- und Metadatenparser](docs/week-02-parsers.md)
 
 ## Nachbelastungslogik
 
@@ -34,8 +41,8 @@ tatsächlich weiter unter Stress stand.
 
 ## Monatsplan
 
-- Woche 1: Datenmodelle und Konfiguration
-- Woche 2: JSON-, MTPX- und DATA-Parser
+- Woche 1: Datenmodelle und Konfiguration — abgeschlossen
+- Woche 2: JSON-, MTPX- und DATA-Parser — abgeschlossen
 - Woche 3: LOG-/TDMS-Parser und Analyse
 - Woche 4: Streamlit-Oberfläche, Graphen und Gesamttests
 
