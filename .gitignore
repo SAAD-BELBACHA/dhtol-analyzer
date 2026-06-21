@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local tools
+.verdent/
+.vscode/
+.idea/
+
+# Operating system
+.DS_Store
+Screenshot *.png
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# DHTOL raw measurement data
+/*.tdms
+/*.tdms_index
+/*.log
+/*.data
+/*.store
+/*.mtpx
+/*degree.json
+/ReadMe_SP212AGA.txt
