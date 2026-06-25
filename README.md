@@ -6,16 +6,14 @@ Lernprojekt zur automatischen Auswertung von DHTOL-Testläufen.
 
 Fundament und Dateiparser fertig:
 
-- gemeinsame Datenmodelle
-- Statusmodell Grün/Gelb/Rot
+- schlanke Datenmodelle für Parser-Ergebnisse
 - geplante und geloggte Stresszeit
-- Berechnung der Nachbelastungszeit
-- zentrale Konfigurationswerte
-- Unterstützung für 1–3 Zonen mit jeweils bis zu 8 Boards
+- rechnerische Nachbelastungslogik dokumentiert
+- Unterstützung für Zonen A, B und C
 - JSON-Testkonfiguration und Ovenplan
 - automatische HV-/MV-Erkennung über `f_MV`
 - geplante Testzeit aus MTPX
-- Board-Laufzeit und Hardwaredaten aus DATA
+- Board-Laufzeit und Firmwareversion aus DATA
 
 Dokumentation:
 
@@ -41,7 +39,7 @@ tatsächlich weiter unter Stress stand.
 
 ## Monatsplan
 
-- Woche 1: Datenmodelle und Konfiguration — abgeschlossen
+- Woche 1: schlanke Parser-Datenmodelle — abgeschlossen
 - Woche 2: JSON-, MTPX- und DATA-Parser — abgeschlossen
 - Woche 3: LOG-/TDMS-Parser und Analyse
 - Woche 4: Streamlit-Oberfläche, Graphen und Gesamttests

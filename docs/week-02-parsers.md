@@ -1,31 +1,43 @@
-# Woche 2 – Konfigurations- und Metadatenparser
+# Woche 2 - Konfigurations- und Metadatenparser
 
 ## 1. Wochenziel
 
-Woche 2 verbindet reale DHTOL-Dateien mit den Datenmodellen aus Woche 1.
+Woche 2 verbindet echte DHTOL-Dateien mit den schlanken Datenmodellen aus
+Woche 1.
 
-Die Anwendung soll automatisch erkennen:
-
-```text
-Welche Boards gehören zum Test?
-Welche Zone und Position besitzt jedes Board?
-Läuft der Test im HV- oder MV-Modus?
-Wie lange war der Test geplant?
-Wie viel Stresszeit wurde je Board gespeichert?
-Welche Hardware- und Firmwareversion wurde verwendet?
-```
-
-Verarbeitungsweg:
+Der Code liest drei Dateitypen:
 
 ```text
-JSON + MTPX + DATA
-        ↓
-      Parser
-        ↓
-ParsedConfig, geplante Sekunden und BoardMetadata
+JSON → Testkonfiguration und Ovenplan
+MTPX → geplante Testzeit
+DATA → geloggte Board-Stresszeit und Firmwareversion
 ```
 
-## 2. JSON-Testkonfiguration
+Der oeffentliche Stand bleibt bewusst klein. LOG-, TDMS-, Streamlit- und
+Glitch-Code sind noch nicht Teil dieses GitHub-Stands.
+
+## 2. Benutzte Bibliotheken
+
+Nur Standardbibliothek plus `pytest` fuer Tests:
+
+| Bibliothek | Einsatz |
+|---|---|
+| `json` | JSON-, MTPX- und DATA-Dateien laden |
+| `re` | Zone, DUT-ID, `f_MV` und Stop-Time-Fallback suchen |
+| `pathlib.Path` | Dateipfade plattformunabhaengig behandeln |
+| `dataclasses` | Parser-Ergebnisse als klare Objekte |
+| `enum` | feste Werte fuer Zone und Temperaturmodus |
+| `ast` | sichere Auswertung von MTPX-Matheausdruecken |
+| `operator` | erlaubte Rechenoperationen `+`, `-`, `*`, `/` |
+| `pytest` | automatisierte Tests |
+
+`requirements.txt` enthaelt deshalb nur:
+
+```text
+pytest>=8.0
+```
+
+## 3. JSON-Testkonfiguration
 
 Datei:
 
@@ -33,71 +45,77 @@ Datei:
 parsers/config_json.py
 ```
 
-Der JSON-Parser liest:
+Der Parser liest:
 
 - Testname
 - Zone
+- Instrumentliste
 - Ovenplan
 - Slot beziehungsweise Position
 - DUT-Name
 - Hardware-Target
-- Load-Board und DUT-Board
-- Temperaturmodus
+- Load-Board
+- DUT-Board
+- uC-FSM
+- HV-/MV-Modus ueber `f_MV`
 
 Beispiel:
 
 ```json
 {
-  "Zone": "A",
-  "Slot": "1",
-  "DUT": "88_1_2",
-  "HW Target": "01be8edd"
+  "Test Name": "run_A_test",
+  "Ovenplan": [
+    {
+      "Zone": "A",
+      "Slot": "1",
+      "DUT": "88_1_2",
+      "HW Target": "01be8edd"
+    }
+  ],
+  "Testplans": [
+    {"functions": [{"code": "f_MV = true"}]}
+  ]
 }
 ```
 
 Ergebnis:
 
 ```text
-controller_id = 88
+test_name     = run_A_test
 zone          = A
+temp_mode     = MVoltage
+controller_id = 88
 position      = 1
 dut_name      = 88_1_2
 hw_target     = 01be8edd
 ```
 
-Controller-ID und Position bleiben getrennt. Controller `88` kann auf Position
-`1` stehen. Bei späteren Testsystemen können weitere Zonen und andere
-Controller-IDs verwendet werden.
+### Freie DUT-Namen
 
-## 3. Freie DUT-Namen
+Nicht jeder Test nutzt Namen wie `88_1_2`.
 
-Nicht jeder Test verwendet einen Namen wie:
+Auch das ist gueltig:
 
-```text
-58_1_2
+```json
+{
+  "Zone": "A",
+  "Slot": "2",
+  "DUT": "aa",
+  "HW Target": "target-aa"
+}
 ```
 
-Der Beispielordner `Same LOT DUTs` verwendet:
-
-```text
-aa
-bb
-cc
-dd
-```
-
-Diese Namen sind ebenfalls gültig. Falls keine numerische Controller-ID im
-DUT-Namen enthalten ist:
+Ergebnis:
 
 ```text
 controller_id = None
+position      = 2
+dut_name      = aa
 ```
-
-Zone, Position, DUT-Name und Hardware-Target bleiben trotzdem verfügbar.
 
 ## 4. HV- und MV-Erkennung
 
-Der Modus wird aus dem Testplan-Code gelesen:
+Der Modus steht im Testplan-Code:
 
 ```lua
 f_MV = false
@@ -105,28 +123,14 @@ f_MV = false
 
 Zuordnung:
 
-| Config-Wert | Modus | T0 | T1 |
-|---|---|---|---|
-| `f_MV = false` | HV | Low-Side-Schalter | High-Side-Schalter |
-| `f_MV = true` | MV | Low-Side-Schalter | DUT-Board |
+| Wert | Modus |
+|---|---|
+| `f_MV = false` | `TempMode.HV` |
+| `f_MV = true` | `TempMode.MV` |
+| fehlt | `TempMode.HV` als Default |
 
-Die Logdatei besitzt in beiden Modi dieselben Spalten `t0` und `t1`. Nur die
-physikalische Bedeutung von `t1` ändert sich.
-
-Der Parser speichert deshalb:
-
-```python
-TempMode.HV
-```
-
-oder:
-
-```python
-TempMode.MV
-```
-
-Spätere Analyse kann auf den Rohspalten arbeiten. Diagramme verwenden den
-Modus in Woche 4 für die richtige Beschriftung.
+Der Parser durchsucht verschachtelte Strings in `Testplans`. Dadurch ist er
+unabhaengig davon, wie tief der Code im JSON liegt.
 
 ## 5. MTPX und geplante Testzeit
 
@@ -136,36 +140,52 @@ Datei:
 parsers/mtpx.py
 ```
 
-Die geplante Testzeit steht typischerweise im Template:
+Typischer Inhalt:
 
 ```json
 {
-  "templateName": "stop_time",
-  "templateValue": "1001*3600"
+  "templateValues": [
+    {
+      "templateName": "stop_time",
+      "templateValue": "1001*3600"
+    }
+  ]
 }
 ```
 
-Der Parser wertet nur sichere mathematische Ausdrücke aus:
+Ausgabe:
 
+```text
+planned_test_seconds = 3603600
+```
+
+### Warum kein `eval()`?
+
+`templateValue` ist Text. Gefaehrlich waere:
+
+```python
+eval("1001*3600")
+```
+
+Darum nutzt der Parser `ast` und erlaubt nur:
+
+- Zahlen
+- Klammern
 - Addition
 - Subtraktion
 - Multiplikation
 - Division
-- positive und negative Zahlen
-- Klammern
 
-Beliebiger Python-Code wird nicht ausgeführt.
-
-Beispiel:
+Dieser Ausdruck ist erlaubt:
 
 ```text
-1001 × 3600 = 3.603.600 Sekunden
+1001*3600
 ```
 
-Das entspricht:
+Dieser Ausdruck wird abgelehnt:
 
 ```text
-1001 Stunden
+__import__('os').system('echo no')
 ```
 
 ## 6. DATA-Dateien
@@ -176,86 +196,85 @@ Datei:
 parsers/board_data.py
 ```
 
-Jedes Board besitzt eine `.data`-Datei mit Test- und Hardwareinformationen.
-
-Gelesene Werte:
+Woche 2 speichert nur:
 
 - `Test Info.Seconds`
-- Anzahl Zyklen
-- Hostname
-- IP-Adresse
-- MAC-Adresse
-- Hardwareversion
-- Firmwareversion
+- letzte Firmwareversion aus `HW History[-1].HW Info.version.fw`
 
 Beispiel:
 
 ```json
 {
   "Test Info": {
-    "Cycles": 0,
-    "Seconds": 2305183.4
-  }
+    "Cycles": 2,
+    "Seconds": 123.5
+  },
+  "HW History": [
+    {
+      "HW Info": {
+        "hostname": "controller-88",
+        "IP": "1.2.3.4",
+        "MAC": "00-00",
+        "version": {
+          "hw": "5.0",
+          "fw": "9.0"
+        }
+      }
+    }
+  ]
 }
 ```
 
-Die gespeicherten Sekunden werden als Log-Stresszeit verwendet:
+Ergebnis:
 
 ```text
-Log-Stresszeit = Test Info.Seconds
+log_stress_seconds = 123.5
+firmware_version   = 9.0
 ```
 
-Negative oder ungültige Werte werden auf `0` gesetzt.
+Bewusst nicht gespeichert:
 
-## 7. Nachbelastungszeit
+- `Cycles`
+- `hostname`
+- `IP`
+- `MAC`
+- Hardwareversion `hw`
 
-Mit geplanter Zeit aus MTPX und Log-Stresszeit aus DATA kann die rechnerische
-Nachbelastung bestimmt werden:
+Grund: Diese Werte werden im aktuellen Auswertestand nicht benutzt. Sie koennen
+spaeter wieder eingefuehrt werden, wenn eine Analyse sie wirklich braucht.
+
+## 7. Fehlerbehandlung
+
+Parser sollen bei einer einzelnen kaputten Datei nicht hart abbrechen.
+
+Verhalten:
+
+- kaputte JSON-Datei → leeres `ParsedConfig` plus Warnung
+- fehlende oder kaputte MTPX-Datei → `None`
+- fehlende oder kaputte DATA-Datei → `None`
+- ungueltiger Ovenplan-Eintrag → Eintrag wird uebersprungen
+- freier DUT-Name → gueltig, `controller_id = None`
+
+## 8. Tests
+
+Datei:
 
 ```text
-Rechnerische Nachbelastung
-= max(0, geplante Testzeit − Log-Stresszeit)
+tests/test_week_02_parsers.py
 ```
 
-Beispiel:
+Getestet wird:
 
-```text
-Geplant:       10 Stunden
-Geloggter Test: 8 Stunden
-Differenz:      2 Stunden
-```
-
-Diese Differenz ist zunächst nur rechnerisch. Ob das Board nach dem letzten
-Board-Log tatsächlich weiter bestromt wurde, wird später mit PSU-/EL- oder
-Host-Stromdaten geprüft.
-
-## 8. Fehlerbehandlung
-
-Parser sollen bei einer fehlerhaften Datei nicht die gesamte Analyse
-abbrechen.
-
-Beispiele:
-
-- beschädigte JSON-Datei → Warnung
-- fehlende oder beschädigte MTPX-Datei → Ergebnis `None`
-- ungültiger Ovenplan-Eintrag → Eintrag wird übersprungen
-- fehlende oder beschädigte DATA-Datei → Ergebnis `None`
-- freie DUT-Bezeichnung → Board bleibt nutzbar
-
-JSON-Warnungen werden im `ParsedConfig` gesammelt. Ordnerübergreifende
-Testlauferkennung folgt in Woche 3.
-
-## 9. Tests
-
-Woche 2 besitzt automatisierte Tests für:
-
-- Ovenplan und Zone
+- JSON-Ovenplan
+- Zone A/B/C
 - HV-/MV-Erkennung
 - freie DUT-Namen
+- Warnung bei kaputtem JSON
 - sichere MTPX-Berechnung
-- DATA-Hardwareinformationen
-- beschädigte JSON-Dateien
-- ungültige Ovenplan-Einträge
+- Ablehnung von ausfuehrbarem MTPX-Ausdruck
+- DATA-Stresszeit
+- DATA-Firmwareversion
+- Entfernen ungenutzter DATA-Felder aus `BoardMetadata`
 
 Testbefehl:
 
@@ -263,22 +282,22 @@ Testbefehl:
 pytest -q
 ```
 
-## 10. Ergebnis von Woche 2
+## 9. Ergebnis von Woche 2
 
-Nach Woche 2 können einzelne Konfigurations- und Metadatendateien sicher in
-strukturierte Python-Objekte umgewandelt werden:
+Nach Woche 2 kann der Code einzelne Konfigurations- und Metadatendateien
+sicher in Python-Objekte umwandeln:
 
 ```text
 JSON → ParsedConfig + OvenplanEntry
 MTPX → geplante Testzeit in Sekunden
-DATA → BoardMetadata + Log-Stresszeit
+DATA → BoardMetadata mit Stresszeit + Firmwareversion
 ```
 
-Damit ist die Grundlage für Woche 3 vorhanden:
+Naechste Schritte:
 
-- Testordner und zusammengehörige Läufe erkennen
+- zusammengehoerige Testordner erkennen
 - Board-Logs einlesen
 - TDMS-Stromdaten einlesen
 - Fehler erkennen
 - Temperatur-Glitches analysieren
-- tatsächliche Nachbelastung über Stromabfall bestätigen
+- Streamlit-Oberflaeche bauen

@@ -115,7 +115,7 @@ def test_mtpx_rejects_executable_expression(tmp_path: Path) -> None:
     assert parse_planned_test_seconds(source) is None
 
 
-def test_board_data_parses_stress_and_latest_hardware(
+def test_board_data_parses_stress_and_latest_firmware(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "board.data"
@@ -142,7 +142,9 @@ def test_board_data_parses_stress_and_latest_hardware(
 
     assert metadata is not None
     assert metadata.log_stress_seconds == 123.5
-    assert metadata.cycles == 2
-    assert metadata.hostname == "controller-88"
-    assert metadata.hardware_version == "5.0"
     assert metadata.firmware_version == "9.0"
+    assert not hasattr(metadata, "cycles")
+    assert not hasattr(metadata, "hostname")
+    assert not hasattr(metadata, "ip_address")
+    assert not hasattr(metadata, "mac_address")
+    assert not hasattr(metadata, "hardware_version")

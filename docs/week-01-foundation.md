@@ -1,93 +1,68 @@
-# Woche 1 – Fundament: Datenmodelle und Konfiguration
+# Woche 1 - Fundament: schlanke Parser-Datenmodelle
 
 ## 1. Wochenziel
 
-In Woche 1 wurde noch keine Datei geparst und noch keine Benutzeroberfläche
-gebaut. Zuerst entstand die gemeinsame Sprache des Projekts.
+Woche 1 legt nur die gemeinsamen Python-Objekte an, die die Parser aus Woche 2
+wirklich brauchen.
 
-Alle späteren Module benötigen dieselben Begriffe:
-
-```text
-Messdateien → Parser → Datenmodelle → Analyse → Visualisierung
-```
-
-Parser erzeugen strukturierte Objekte. Analysen lesen und bewerten diese
-Objekte. Die Oberfläche zeigt ihre Werte an.
-
-Ohne gemeinsame Datenmodelle würden Parser, Analyse und Oberfläche eigene
-Feldnamen und Strukturen verwenden. Das führt schnell zu Tippfehlern,
-unterschiedlichen Bedeutungen und schwer auffindbaren Fehlern.
-
-## 2. Erkenntnisse aus echten Testdaten
-
-Der Beispielordner enthält:
-
-- eine Zone: Zone A
-- acht Board-Positionen: 1–8
-- Controller-IDs: 88–95
-- geplante Testzeit: `1001*3600` Sekunden
-- Board-Laufzeiten von ungefähr 640,33 Stunden
-
-Wichtige Modellkorrektur:
+Der erste oeffentliche Stand soll klein bleiben:
 
 ```text
-Controller-ID ≠ globale Board-Position
+JSON / MTPX / DATA
+        ↓
+      Parser
+        ↓
+Zone, TempMode, OvenplanEntry, ParsedConfig, BoardMetadata
 ```
 
-Controller `88` ist nicht „Board 88 von 24“. Er steht im Beispieltest auf
-Position 1 der Zone A.
+Nicht enthalten sind bewusst:
 
-Darum speichert das Modell getrennt:
+- Streamlit-Oberflaeche
+- Board-Log-Zeitreihen
+- TDMS-Leser
+- Fehler-/Statusmodell
+- Temperatur-Glitch-Analyse
+- PSU-/EL-Stromauswertung
 
-```text
-controller_id = 88
-zone          = A
-position      = 1
-dut_name      = 88_1_2
-```
+Diese Teile folgen spaeter, wenn sie auch durch echten Code benutzt werden.
 
-Diese Trennung unterstützt sowohl den aktuellen Test mit acht Boards als auch
-spätere Testordner mit drei Zonen und insgesamt 24 Boards.
+## 2. Warum Dataclasses?
 
-## 3. Warum `dataclass`?
+Parser sollen keine freien Dictionaries zurueckgeben.
 
-Eine Dataclass ist ein Bauplan für strukturierte Daten.
-
-Statt eines freien Dictionaries:
+Freies Dictionary:
 
 ```python
-board = {
-    "controller_id": 88,
+entry = {
+    "zone": "A",
     "position": 1,
+    "dut_name": "88_1_2",
 }
 ```
 
-verwenden wir ein definiertes Objekt:
+Strukturiertes Modell:
 
 ```python
-board = Board(
+entry = OvenplanEntry(
     controller_id=88,
-    zone=Zone.A,
     position=1,
+    zone=Zone.A,
     dut_name="88_1_2",
     hw_target="01be8edd",
-    nenn_strom_a=2.0,
 )
 ```
 
 Vorteile:
 
-- erlaubte Felder sind sichtbar
-- erwartete Datentypen sind dokumentiert
-- Editor kann beim Schreiben helfen
-- Tippfehler in Feldnamen werden schneller erkannt
-- Objekte lassen sich leichter testen
+- Feldnamen sind sichtbar
+- Typen sind dokumentiert
+- Tests koennen gezielt pruefen
+- Parser-Ergebnis bleibt stabil
+- spaetere Analyse muss keine JSON-Rohstruktur kennen
 
-## 4. Warum `Enum`?
+## 3. Warum Enums?
 
-Enums definieren feste erlaubte Werte.
-
-Beispiel:
+Enums begrenzen erlaubte Werte.
 
 ```python
 class Zone(Enum):
@@ -96,134 +71,124 @@ class Zone(Enum):
     C = "C"
 ```
 
-Ohne Enum könnte versehentlich `"AA"` oder `"zone-a"` gespeichert werden.
-Mit `Zone.A` bleibt Bedeutung eindeutig.
+Dadurch speichern Parser nicht versehentlich Werte wie `"zone-a"` oder `"AA"`.
 
-Verwendete Enums:
+Aktive Enums:
 
 | Enum | Zweck |
 |---|---|
-| `FaultType` | OC, OV, OT, Network, GERR |
-| `Zone` | A, B oder C |
-| `Status` | Grün, Gelb oder Rot |
-| `TempMode` | HVoltage oder MVoltage |
+| `Zone` | Ofenzone A, B oder C |
+| `TempMode` | HV- oder MV-Betrieb |
 
-## 5. Messmodell
+## 4. Controller-ID und Position
 
-`Measurement` beschreibt genau eine Messzeile aus einem Board-Log.
+Echte DUT-Namen koennen so aussehen:
 
-Gespeichert werden:
+```text
+88_1_2
+```
 
-- Zeitstempel
-- Eingangsspannung
-- Board-Strom
-- Gate-Differenzspannung
-- DUT-Ausgangsspannung
-- Board-Ausgangsspannung
-- Low-Side-Spannung
-- Temperaturen T0 und T1
-- Glitch-Flags für beide Temperatursensoren
+Daraus wird nur die erste Zahl als Controller-ID gelesen:
 
-Glitch-Werte werden später nicht gelöscht. Originalwert bleibt erhalten und
-erhält nur ein Flag:
+```text
+controller_id = 88
+```
+
+Die Ofenposition kommt aus dem Ovenplan-Feld `Slot`:
+
+```text
+position = 1
+```
+
+Wichtig:
+
+```text
+Controller-ID != Board-Position
+```
+
+Controller `88` steht im Beispiel auf Position `1`. Diese Trennung verhindert
+spaeter falsche Board-Zuordnungen.
+
+Freie DUT-Namen bleiben erlaubt:
+
+```text
+aa
+bb
+cc
+```
+
+Dann gilt:
+
+```text
+controller_id = None
+```
+
+Zone, Position, DUT-Name und Hardware-Target bleiben trotzdem vorhanden.
+
+## 5. Modelle
+
+### `OvenplanEntry`
+
+Ein Eintrag aus dem JSON-Ovenplan:
 
 ```python
-t1_glitch = True
+@dataclass
+class OvenplanEntry:
+    controller_id: Optional[int]
+    position: int
+    zone: Zone
+    dut_name: str
+    hw_target: str
+    load_board: str = ""
+    dut_board: str = ""
+    uc_fsm: str = ""
 ```
 
-Damit bleiben Rohdaten für Diagnose nachvollziehbar.
+### `ParsedConfig`
 
-## 6. Fehlermodell
-
-`Fault` speichert:
-
-- Fehlertyp
-- Zeitpunkt
-- Echt/Fake-Entscheidung
-- wer Entscheidung getroffen hat
-
-`is_real` besitzt drei mögliche Zustände:
-
-```text
-True  → echter DUT-Ausfall
-False → Scheinfehler
-None  → Entscheidung noch offen
-```
-
-Der dritte Zustand ist wichtig. Bei OC, OV, OT und GERR entscheidet später ein
-Engineer. `False` dürfte nicht als Standard verwendet werden, weil das bereits
-eine fachliche Entscheidung wäre.
-
-## 7. Statusmodell
-
-Board-Status wird nicht separat gespeichert. Er wird aus Fehlern und Glitches
-berechnet:
-
-```text
-Rot   → mindestens ein bestätigter echter Fehler
-Gelb  → Fehler oder Glitch vorhanden, aber kein echter Fehler bestätigt
-Grün  → kein Fehler und kein Glitch
-```
-
-Beispiele:
-
-```text
-Board normal                              → Grün
-Temperatursensor liefert falsche Werte    → Gelb
-OC-Fehler, Entscheidung noch offen        → Gelb
-OC als echter DUT-Ausfall bestätigt       → Rot
-```
-
-Berechnung über `@property` verhindert veraltete Statuswerte. Wenn sich eine
-Fehlerentscheidung ändert, ändert sich Status beim nächsten Zugriff direkt mit.
-
-## 8. Listen mit `default_factory`
-
-Jedes Board braucht eigene Fehler- und Glitch-Listen:
+Gesamter Inhalt einer JSON-Testkonfiguration, soweit Woche 2 ihn braucht:
 
 ```python
-faults: list[Fault] = field(default_factory=list)
+@dataclass
+class ParsedConfig:
+    test_name: str
+    zone: Optional[Zone]
+    temp_mode: TempMode
+    instruments: list[str] = field(default_factory=list)
+    ovenplan_entries: list[OvenplanEntry] = field(default_factory=list)
+    source_path: Optional[Path] = None
+    warnings: list[str] = field(default_factory=list)
 ```
 
-`default_factory=list` erzeugt für jedes Board eine neue Liste.
+`warnings` sammelt lesbare Probleme, ohne die komplette Analyse sofort
+abzubrechen.
 
-Eine gemeinsame Standardliste könnte dazu führen, dass Fehler von Board 88
-versehentlich auch bei Board 89 erscheinen.
+### `BoardMetadata`
 
-## 9. Zonen und Testlauf
-
-`ZoneData` gruppiert:
-
-- Zone A, B oder C
-- Boards dieser Zone
-- später Zonen-Gesamtstrom aus PSU/EL
-
-`TestRun` beschreibt gesamten Test:
-
-- Testname
-- geplante Testzeit
-- Ofentemperatur
-- Nennstrom
-- vorhandene Zonen
-
-Zonen werden als Liste gespeichert:
+Woche 2 speichert aus `.data` nur Werte, die aktuell genutzt werden:
 
 ```python
-zones: list[ZoneData]
+@dataclass
+class BoardMetadata:
+    log_stress_seconds: float = 0.0
+    firmware_version: str = ""
+    source_path: Optional[Path] = None
 ```
 
-Darum funktioniert Modell dynamisch:
+Nicht gespeichert:
 
-```text
-Beispielordner: 1 Zone × 8 Boards  = 8 Boards
-Voller Aufbau:  3 Zonen × 8 Boards = 24 Boards
-```
+- Hostname
+- IP-Adresse
+- MAC-Adresse
+- Hardwareversion
+- Zyklen
 
-`all_boards` erzeugt bei Bedarf eine flache Liste aller Boards aus allen Zonen.
+Diese Felder stehen teilweise in `.data`, sind aber fuer die aktuelle
+DHTOL-Auswertung keine Entscheidungsbasis.
 
-## 10. Geplante Testzeit
+## 6. Geplante und geloggte Stresszeit
 
-Suche in echten Dateien ergab:
+Die geplante Testzeit kommt spaeter aus MTPX:
 
 ```json
 {
@@ -232,13 +197,7 @@ Suche in echten Dateien ergab:
 }
 ```
 
-Dieser Wert liegt in der MTPX-Datei.
-
-```text
-1001 × 3600 = 3.603.600 Sekunden
-```
-
-Die `.data`-Datei enthält dagegen geloggte Board-Stresszeit:
+Die geloggte Board-Stresszeit kommt aus DATA:
 
 ```json
 {
@@ -248,76 +207,20 @@ Die `.data`-Datei enthält dagegen geloggte Board-Stresszeit:
 }
 ```
 
-Für Board 88:
+Rechnerische Nachbelastung bleibt als Projektregel dokumentiert:
 
 ```text
-2.305.178,563 Sekunden = 640,327 Stunden
+Nachbelastungszeit = max(0, geplante Testzeit - geloggte Stresszeit)
 ```
 
-## 11. Nachbelastungslogik
+Der Code in Woche 1/2 speichert die beiden Rohwerte. Die bestaetigte
+Nachbelastung ueber Stromdaten folgt spaeter.
 
-Definition dieses Projekts:
+## 7. Rohdatenschutz
 
-```text
-Nachbelastungszeit =
-max(0, geplante Testzeit − Log-Stresszeit)
-```
+Messordner koennen sehr gross sein. Rohdaten gehoeren nicht ins Repository.
 
-Rechnung Board 88:
-
-```text
-Geplante Testzeit:  3.603.600,000 s
-Log-Stresszeit:    −2.305.178,563 s
-Nachbelastung:      1.298.421,437 s
-                   = 360,673 h
-```
-
-`max(0, ...)` verhindert negative Zeiten, falls Log-Stresszeit aus technischen
-Gründen größer als geplante Testzeit ist.
-
-Fachlich wichtig:
-
-Diese Rechnung liefert rechnerische Lücke. Sie beweist noch nicht, dass DUT
-während gesamter Lücke wirklich weiter gestresst wurde. Spätere PSU/EL-Analyse
-muss Stromverlauf prüfen.
-
-## 12. Zentrale Konfiguration
-
-`config.py` sammelt feste Regeln an einem Ort.
-
-Beispiel:
-
-```python
-TEMP_PHYS_MAX_C = 250.0
-```
-
-Das ist verständlicher als versteckte Zahl:
-
-```python
-if temperature > 250:
-```
-
-Konfiguration enthält:
-
-- physikalische Temperaturgrenzen
-- vorläufige Toleranz zum Ofensollwert
-- maximale Temperaturänderungsrate
-- Dauer für Sensor-Tod-Erkennung
-- Schwellen für Stromabfall
-- Zeitfenster für Ereigniskorrelation
-- acht Boards pro Zone
-- maximal drei Zonen
-- Annahme, dass Boards reconnecten können
-
-Viele Schwellen sind Startwerte. Echte Messdaten müssen sie in späteren Wochen
-bestätigen oder korrigieren.
-
-## 13. Rohdatenschutz im Repository
-
-Messordner ist ungefähr 38 GB groß. TDMS-, LOG-, DATA-, STORE- und MTPX-Dateien
-gehören nicht in Git.
-
-`.gitignore` verhindert versehentlichen Upload:
+`.gitignore` blockiert deshalb:
 
 ```text
 *.tdms
@@ -328,26 +231,23 @@ gehören nicht in Git.
 *.mtpx
 ```
 
-Repository enthält nur Quellcode und Dokumentation.
+GitHub enthaelt nur Quellcode, Tests und Dokumentation.
 
-## 14. Ergebnis Woche 1
+## 8. Ergebnis Woche 1
 
 Fertig:
 
-- sichere Grundtypen
-- Datenmodelle
-- Statuslogik
-- Nachbelastungsformel
-- zentrale Konfiguration
-- Architektur für 8 oder 24 Boards
-- Rohdatenschutz
+- schlanke Parser-Datenmodelle
+- klare Zonenwerte A/B/C
+- HV-/MV-Modus als Enum
+- getrennte Controller-ID und Slot-Position
+- BoardMetadata nur mit genutzten DATA-Werten
+- Rohdatenschutz ueber `.gitignore`
 
-Noch nicht Teil des öffentlichen Wochenstands:
+Noch nicht Teil von Woche 1:
 
-- Dateiparser
-- TDMS-Leser
-- Glitch-Analyse
-- Stromattribution
-- Streamlit-Oberfläche
-
-Diese Teile folgen schrittweise in Woche 2–4.
+- Statusmodell
+- Fault-Modell
+- Measurement-Zeitreihenmodell
+- TestRun-/ZoneData-Gesamtmodell
+- zentrale Analyse-Konfiguration
