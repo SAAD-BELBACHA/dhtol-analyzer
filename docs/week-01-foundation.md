@@ -1,43 +1,45 @@
-# Woche 1 – Fundament: Datenmodelle und Konfiguration
+# Semaine 1 - Fondation : modeles de donnees et configuration
 
-## 1. Wochenziel
+## 1. Objectif de la semaine
 
-In Woche 1 wurde noch keine Datei geparst und noch keine Benutzeroberfläche
-gebaut. Zuerst entstand die gemeinsame Sprache des Projekts.
+Pendant la semaine 1, aucun fichier n'a encore ete parse et aucune interface
+utilisateur n'a encore ete construite. La premiere etape a ete de creer le
+langage commun du projet.
 
-Alle späteren Module benötigen dieselben Begriffe:
-
-```text
-Messdateien → Parser → Datenmodelle → Analyse → Visualisierung
-```
-
-Parser erzeugen strukturierte Objekte. Analysen lesen und bewerten diese
-Objekte. Die Oberfläche zeigt ihre Werte an.
-
-Ohne gemeinsame Datenmodelle würden Parser, Analyse und Oberfläche eigene
-Feldnamen und Strukturen verwenden. Das führt schnell zu Tippfehlern,
-unterschiedlichen Bedeutungen und schwer auffindbaren Fehlern.
-
-## 2. Erkenntnisse aus echten Testdaten
-
-Der Beispielordner enthält:
-
-- eine Zone: Zone A
-- acht Board-Positionen: 1–8
-- Controller-IDs: 88–95
-- geplante Testzeit: `1001*3600` Sekunden
-- Board-Laufzeiten von ungefähr 640,33 Stunden
-
-Wichtige Modellkorrektur:
+Tous les modules futurs ont besoin des memes notions :
 
 ```text
-Controller-ID ≠ globale Board-Position
+Fichiers de mesure -> Parseurs -> Modeles de donnees -> Analyse -> Visualisation
 ```
 
-Controller `88` ist nicht „Board 88 von 24“. Er steht im Beispieltest auf
-Position 1 der Zone A.
+Les parseurs produisent des objets structures. Les analyses lisent et evaluent
+ces objets. L'interface affiche leurs valeurs.
 
-Darum speichert das Modell getrennt:
+Sans modeles de donnees communs, les parseurs, l'analyse et l'interface
+utiliseraient leurs propres noms de champs et leurs propres structures. Cela
+provoque vite des fautes de frappe, des significations differentes et des
+erreurs difficiles a trouver.
+
+## 2. Enseignements tires de vraies donnees de test
+
+Le dossier d'exemple contient :
+
+- une zone : Zone A
+- huit positions de board : 1-8
+- IDs de controleur : 88-95
+- duree de test planifiee : `1001*3600` secondes
+- durees de fonctionnement des boards d'environ 640,33 heures
+
+Correction importante du modele :
+
+```text
+ID controleur != position globale du board
+```
+
+Le controleur `88` n'est pas le "board 88 sur 24". Dans le test d'exemple, il
+se trouve a la position 1 de la zone A.
+
+Le modele stocke donc les valeurs separement :
 
 ```text
 controller_id = 88
@@ -46,14 +48,14 @@ position      = 1
 dut_name      = 88_1_2
 ```
 
-Diese Trennung unterstützt sowohl den aktuellen Test mit acht Boards als auch
-spätere Testordner mit drei Zonen und insgesamt 24 Boards.
+Cette separation prend en charge le test actuel avec huit boards, mais aussi
+des dossiers de test futurs avec trois zones et 24 boards au total.
 
-## 3. Warum `dataclass`?
+## 3. Pourquoi `dataclass` ?
 
-Eine Dataclass ist ein Bauplan für strukturierte Daten.
+Une dataclass est un plan pour des donnees structurees.
 
-Statt eines freien Dictionaries:
+Au lieu d'un dictionnaire libre :
 
 ```python
 board = {
@@ -62,7 +64,7 @@ board = {
 }
 ```
 
-verwenden wir ein definiertes Objekt:
+nous utilisons un objet defini :
 
 ```python
 board = Board(
@@ -75,19 +77,19 @@ board = Board(
 )
 ```
 
-Vorteile:
+Avantages :
 
-- erlaubte Felder sind sichtbar
-- erwartete Datentypen sind dokumentiert
-- Editor kann beim Schreiben helfen
-- Tippfehler in Feldnamen werden schneller erkannt
-- Objekte lassen sich leichter testen
+- les champs autorises sont visibles
+- les types de donnees attendus sont documentes
+- l'editeur peut aider pendant l'ecriture
+- les fautes de frappe dans les noms de champs sont reperees plus vite
+- les objets sont plus faciles a tester
 
-## 4. Warum `Enum`?
+## 4. Pourquoi `Enum` ?
 
-Enums definieren feste erlaubte Werte.
+Les enums definissent des valeurs autorisees fixes.
 
-Beispiel:
+Exemple :
 
 ```python
 class Zone(Enum):
@@ -96,134 +98,135 @@ class Zone(Enum):
     C = "C"
 ```
 
-Ohne Enum könnte versehentlich `"AA"` oder `"zone-a"` gespeichert werden.
-Mit `Zone.A` bleibt Bedeutung eindeutig.
+Sans enum, `"AA"` ou `"zone-a"` pourraient etre stockes par erreur. Avec
+`Zone.A`, la signification reste claire.
 
-Verwendete Enums:
+Enums utilisees :
 
-| Enum | Zweck |
+| Enum | But |
 |---|---|
 | `FaultType` | OC, OV, OT, Network, GERR |
-| `Zone` | A, B oder C |
-| `Status` | Grün, Gelb oder Rot |
-| `TempMode` | HVoltage oder MVoltage |
+| `Zone` | A, B ou C |
+| `Status` | Vert, Jaune ou Rouge |
+| `TempMode` | HVoltage ou MVoltage |
 
-## 5. Messmodell
+## 5. Modele de mesure
 
-`Measurement` beschreibt genau eine Messzeile aus einem Board-Log.
+`Measurement` decrit exactement une ligne de mesure issue d'un log de board.
 
-Gespeichert werden:
+Valeurs stockees :
 
-- Zeitstempel
-- Eingangsspannung
-- Board-Strom
-- Gate-Differenzspannung
-- DUT-Ausgangsspannung
-- Board-Ausgangsspannung
-- Low-Side-Spannung
-- Temperaturen T0 und T1
-- Glitch-Flags für beide Temperatursensoren
+- horodatage
+- tension d'entree
+- courant du board
+- tension differentielle de gate
+- tension de sortie DUT
+- tension de sortie du board
+- tension low-side
+- temperatures T0 et T1
+- flags de glitch pour les deux capteurs de temperature
 
-Glitch-Werte werden später nicht gelöscht. Originalwert bleibt erhalten und
-erhält nur ein Flag:
+Les valeurs de glitch ne seront pas supprimees plus tard. La valeur originale
+reste conservee et recoit seulement un flag :
 
 ```python
 t1_glitch = True
 ```
 
-Damit bleiben Rohdaten für Diagnose nachvollziehbar.
+Les donnees brutes restent ainsi tracables pour le diagnostic.
 
-## 6. Fehlermodell
+## 6. Modele d'erreur
 
-`Fault` speichert:
+`Fault` stocke :
 
-- Fehlertyp
-- Zeitpunkt
-- Echt/Fake-Entscheidung
-- wer Entscheidung getroffen hat
+- type d'erreur
+- instant
+- decision vrai/faux
+- auteur de la decision
 
-`is_real` besitzt drei mögliche Zustände:
-
-```text
-True  → echter DUT-Ausfall
-False → Scheinfehler
-None  → Entscheidung noch offen
-```
-
-Der dritte Zustand ist wichtig. Bei OC, OV, OT und GERR entscheidet später ein
-Engineer. `False` dürfte nicht als Standard verwendet werden, weil das bereits
-eine fachliche Entscheidung wäre.
-
-## 7. Statusmodell
-
-Board-Status wird nicht separat gespeichert. Er wird aus Fehlern und Glitches
-berechnet:
+`is_real` possede trois etats possibles :
 
 ```text
-Rot   → mindestens ein bestätigter echter Fehler
-Gelb  → Fehler oder Glitch vorhanden, aber kein echter Fehler bestätigt
-Grün  → kein Fehler und kein Glitch
+True  -> vraie defaillance DUT
+False -> erreur apparente
+None  -> decision encore ouverte
 ```
 
-Beispiele:
+Le troisieme etat est important. Pour OC, OV, OT et GERR, un engineer decide
+plus tard. `False` ne doit pas etre utilise comme valeur par defaut, car ce
+serait deja une decision metier.
+
+## 7. Modele de statut
+
+Le statut d'un board n'est pas stocke separement. Il est calcule a partir des
+erreurs et des glitches :
 
 ```text
-Board normal                              → Grün
-Temperatursensor liefert falsche Werte    → Gelb
-OC-Fehler, Entscheidung noch offen        → Gelb
-OC als echter DUT-Ausfall bestätigt       → Rot
+Rouge -> au moins une vraie erreur confirmee
+Jaune -> erreur ou glitch present, mais aucune vraie erreur confirmee
+Vert  -> aucune erreur et aucun glitch
 ```
 
-Berechnung über `@property` verhindert veraltete Statuswerte. Wenn sich eine
-Fehlerentscheidung ändert, ändert sich Status beim nächsten Zugriff direkt mit.
+Exemples :
 
-## 8. Listen mit `default_factory`
+```text
+Board normal                                  -> Vert
+Capteur de temperature avec valeurs fausses   -> Jaune
+Erreur OC, decision encore ouverte            -> Jaune
+OC confirme comme vraie defaillance DUT       -> Rouge
+```
 
-Jedes Board braucht eigene Fehler- und Glitch-Listen:
+Le calcul via `@property` evite les statuts obsoletes. Quand une decision
+d'erreur change, le statut change directement lors du prochain acces.
+
+## 8. Listes avec `default_factory`
+
+Chaque board a besoin de ses propres listes d'erreurs et de glitches :
 
 ```python
 faults: list[Fault] = field(default_factory=list)
 ```
 
-`default_factory=list` erzeugt für jedes Board eine neue Liste.
+`default_factory=list` cree une nouvelle liste pour chaque board.
 
-Eine gemeinsame Standardliste könnte dazu führen, dass Fehler von Board 88
-versehentlich auch bei Board 89 erscheinen.
+Une liste standard partagee pourrait faire apparaitre par erreur les erreurs du
+board 88 aussi sur le board 89.
 
-## 9. Zonen und Testlauf
+## 9. Zones et campagne de test
 
-`ZoneData` gruppiert:
+`ZoneData` regroupe :
 
-- Zone A, B oder C
-- Boards dieser Zone
-- später Zonen-Gesamtstrom aus PSU/EL
+- Zone A, B ou C
+- boards de cette zone
+- plus tard courant total de zone depuis PSU/EL
 
-`TestRun` beschreibt gesamten Test:
+`TestRun` decrit toute la campagne :
 
-- Testname
-- geplante Testzeit
-- Ofentemperatur
-- Nennstrom
-- vorhandene Zonen
+- nom du test
+- duree de test planifiee
+- temperature du four
+- courant nominal
+- zones presentes
 
-Zonen werden als Liste gespeichert:
+Les zones sont stockees sous forme de liste :
 
 ```python
 zones: list[ZoneData]
 ```
 
-Darum funktioniert Modell dynamisch:
+Le modele reste donc dynamique :
 
 ```text
-Beispielordner: 1 Zone × 8 Boards  = 8 Boards
-Voller Aufbau:  3 Zonen × 8 Boards = 24 Boards
+Dossier d'exemple : 1 zone x 8 boards  = 8 boards
+Configuration complete : 3 zones x 8 boards = 24 boards
 ```
 
-`all_boards` erzeugt bei Bedarf eine flache Liste aller Boards aus allen Zonen.
+`all_boards` produit au besoin une liste plate de tous les boards de toutes les
+zones.
 
-## 10. Geplante Testzeit
+## 10. Duree de test planifiee
 
-Suche in echten Dateien ergab:
+La recherche dans de vrais fichiers a donne :
 
 ```json
 {
@@ -232,13 +235,14 @@ Suche in echten Dateien ergab:
 }
 ```
 
-Dieser Wert liegt in der MTPX-Datei.
+Cette valeur se trouve dans le fichier MTPX.
 
 ```text
-1001 × 3600 = 3.603.600 Sekunden
+1001 x 3600 = 3.603.600 secondes
 ```
 
-Die `.data`-Datei enthält dagegen geloggte Board-Stresszeit:
+Le fichier `.data` contient en revanche la duree de stress journalisee du
+board :
 
 ```json
 {
@@ -248,76 +252,76 @@ Die `.data`-Datei enthält dagegen geloggte Board-Stresszeit:
 }
 ```
 
-Für Board 88:
+Pour le board 88 :
 
 ```text
-2.305.178,563 Sekunden = 640,327 Stunden
+2.305.178,563 secondes = 640,327 heures
 ```
 
-## 11. Nachbelastungslogik
+## 11. Logique de post-stress
 
-Definition dieses Projekts:
+Definition de ce projet :
 
 ```text
-Nachbelastungszeit =
-max(0, geplante Testzeit − Log-Stresszeit)
+Duree de post-stress =
+max(0, duree de test planifiee - duree de stress journalisee)
 ```
 
-Rechnung Board 88:
+Calcul pour le board 88 :
 
 ```text
-Geplante Testzeit:  3.603.600,000 s
-Log-Stresszeit:    −2.305.178,563 s
-Nachbelastung:      1.298.421,437 s
-                   = 360,673 h
+Duree de test planifiee :        3.603.600,000 s
+Duree de stress journalisee :   -2.305.178,563 s
+Post-stress :                    1.298.421,437 s
+                                = 360,673 h
 ```
 
-`max(0, ...)` verhindert negative Zeiten, falls Log-Stresszeit aus technischen
-Gründen größer als geplante Testzeit ist.
+`max(0, ...)` evite les durees negatives si la duree de stress journalisee est
+superieure a la duree de test planifiee pour des raisons techniques.
 
-Fachlich wichtig:
+Point metier important :
 
-Diese Rechnung liefert rechnerische Lücke. Sie beweist noch nicht, dass DUT
-während gesamter Lücke wirklich weiter gestresst wurde. Spätere PSU/EL-Analyse
-muss Stromverlauf prüfen.
+Ce calcul fournit un ecart purement mathematique. Il ne prouve pas encore que
+le DUT est vraiment reste sous stress pendant tout cet ecart. L'analyse PSU/EL
+ulterieure doit verifier l'evolution du courant.
 
-## 12. Zentrale Konfiguration
+## 12. Configuration centrale
 
-`config.py` sammelt feste Regeln an einem Ort.
+`config.py` rassemble les regles fixes a un seul endroit.
 
-Beispiel:
+Exemple :
 
 ```python
 TEMP_PHYS_MAX_C = 250.0
 ```
 
-Das ist verständlicher als versteckte Zahl:
+C'est plus comprehensible qu'un nombre cache :
 
 ```python
 if temperature > 250:
 ```
 
-Konfiguration enthält:
+La configuration contient :
 
-- physikalische Temperaturgrenzen
-- vorläufige Toleranz zum Ofensollwert
-- maximale Temperaturänderungsrate
-- Dauer für Sensor-Tod-Erkennung
-- Schwellen für Stromabfall
-- Zeitfenster für Ereigniskorrelation
-- acht Boards pro Zone
-- maximal drei Zonen
-- Annahme, dass Boards reconnecten können
+- limites physiques de temperature
+- tolerance provisoire par rapport a la consigne du four
+- vitesse maximale de variation de temperature
+- duree pour la detection de capteur mort
+- seuils pour chute de courant
+- fenetre temporelle pour correlation d'evenements
+- huit boards par zone
+- maximum trois zones
+- hypothese que les boards peuvent se reconnecter
 
-Viele Schwellen sind Startwerte. Echte Messdaten müssen sie in späteren Wochen
-bestätigen oder korrigieren.
+Beaucoup de seuils sont des valeurs initiales. De vraies donnees de mesure
+doivent les confirmer ou les corriger dans les semaines suivantes.
 
-## 13. Rohdatenschutz im Repository
+## 13. Protection des donnees brutes dans le repository
 
-Messordner ist ungefähr 38 GB groß. TDMS-, LOG-, DATA-, STORE- und MTPX-Dateien
-gehören nicht in Git.
+Le dossier de mesure fait environ 38 Go. Les fichiers TDMS, LOG, DATA, STORE et
+MTPX n'ont pas leur place dans Git.
 
-`.gitignore` verhindert versehentlichen Upload:
+`.gitignore` empeche un upload accidentel :
 
 ```text
 *.tdms
@@ -328,26 +332,26 @@ gehören nicht in Git.
 *.mtpx
 ```
 
-Repository enthält nur Quellcode und Dokumentation.
+Le repository contient seulement le code source et la documentation.
 
-## 14. Ergebnis Woche 1
+## 14. Resultat de la semaine 1
 
-Fertig:
+Termine :
 
-- sichere Grundtypen
-- Datenmodelle
-- Statuslogik
-- Nachbelastungsformel
-- zentrale Konfiguration
-- Architektur für 8 oder 24 Boards
-- Rohdatenschutz
+- types de base securises
+- modeles de donnees
+- logique de statut
+- formule de post-stress
+- configuration centrale
+- architecture pour 8 ou 24 boards
+- protection des donnees brutes
 
-Noch nicht Teil des öffentlichen Wochenstands:
+Pas encore inclus dans l'etat public de la semaine :
 
-- Dateiparser
-- TDMS-Leser
-- Glitch-Analyse
-- Stromattribution
-- Streamlit-Oberfläche
+- parseurs de fichiers
+- lecteur TDMS
+- analyse des glitches
+- attribution du courant
+- interface Streamlit
 
-Diese Teile folgen schrittweise in Woche 2–4.
+Ces parties suivent progressivement pendant les semaines 2-4.

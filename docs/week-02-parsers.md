@@ -1,50 +1,51 @@
-# Woche 2 – Konfigurations- und Metadatenparser
+# Semaine 2 - Parseurs de configuration et de metadonnees
 
-## 1. Wochenziel
+## 1. Objectif de la semaine
 
-Woche 2 verbindet reale DHTOL-Dateien mit den Datenmodellen aus Woche 1.
+La semaine 2 relie de vrais fichiers DHTOL aux modeles de donnees de la
+semaine 1.
 
-Die Anwendung soll automatisch erkennen:
+L'application doit detecter automatiquement :
 
 ```text
-Welche Boards gehören zum Test?
-Welche Zone und Position besitzt jedes Board?
-Läuft der Test im HV- oder MV-Modus?
-Wie lange war der Test geplant?
-Wie viel Stresszeit wurde je Board gespeichert?
-Welche Hardware- und Firmwareversion wurde verwendet?
+Quels boards appartiennent au test ?
+Quelle zone et quelle position possede chaque board ?
+Le test tourne-t-il en mode HV ou MV ?
+Combien de temps le test etait-il planifie ?
+Quelle duree de stress chaque board a-t-il stockee ?
+Quelle version de firmware a ete utilisee ?
 ```
 
-Verarbeitungsweg:
+Chemin de traitement :
 
 ```text
 JSON + MTPX + DATA
         ↓
-      Parser
+      Parseurs
         ↓
-TestRun, ZoneData, Board und BoardMetadata
+TestRun, ZoneData, Board et BoardMetadata
 ```
 
-## 2. JSON-Testkonfiguration
+## 2. Configuration de test JSON
 
-Datei:
+Fichier :
 
 ```text
 parsers/config_json.py
 ```
 
-Der JSON-Parser liest:
+Le parseur JSON lit :
 
-- Testname
-- Zone
-- Ovenplan
-- Slot beziehungsweise Position
-- DUT-Name
-- Hardware-Target
-- Load-Board und DUT-Board
-- Temperaturmodus
+- nom du test
+- zone
+- ovenplan
+- slot ou position
+- nom DUT
+- hardware target
+- load board et DUT board
+- mode de temperature
 
-Beispiel:
+Exemple :
 
 ```json
 {
@@ -55,7 +56,7 @@ Beispiel:
 }
 ```
 
-Ergebnis:
+Resultat :
 
 ```text
 controller_id = 88
@@ -65,19 +66,19 @@ dut_name      = 88_1_2
 hw_target     = 01be8edd
 ```
 
-Controller-ID und Position bleiben getrennt. Controller `88` kann auf Position
-`1` stehen. Bei späteren Testsystemen können weitere Zonen und andere
-Controller-IDs verwendet werden.
+L'ID controleur et la position restent separes. Le controleur `88` peut etre a
+la position `1`. Dans des systemes de test futurs, d'autres zones et d'autres
+IDs de controleur pourront etre utilises.
 
-## 3. Freie DUT-Namen
+## 3. Noms DUT libres
 
-Nicht jeder Test verwendet einen Namen wie:
+Tous les tests n'utilisent pas un nom comme :
 
 ```text
 58_1_2
 ```
 
-Der Beispielordner `Same LOT DUTs` verwendet:
+Le dossier d'exemple `Same LOT DUTs` utilise :
 
 ```text
 aa
@@ -86,58 +87,58 @@ cc
 dd
 ```
 
-Diese Namen sind ebenfalls gültig. Falls keine numerische Controller-ID im
-DUT-Namen enthalten ist:
+Ces noms sont aussi valides. Si aucune ID controleur numerique n'est contenue
+dans le nom DUT :
 
 ```text
 controller_id = None
 ```
 
-Zone, Position, DUT-Name und Hardware-Target bleiben trotzdem verfügbar. In
-der Oberfläche erscheint die fehlende Controller-ID als `—`.
+Zone, position, nom DUT et hardware target restent tout de meme disponibles.
+Dans l'interface, l'ID controleur manquante apparait comme `—`.
 
-## 4. HV- und MV-Erkennung
+## 4. Detection HV et MV
 
-Der Modus wird aus dem Testplan-Code gelesen:
+Le mode est lu depuis le code du plan de test :
 
 ```lua
 f_MV = false
 ```
 
-Zuordnung:
+Correspondance :
 
-| Config-Wert | Modus | T0 | T1 |
+| Valeur config | Mode | T0 | T1 |
 |---|---|---|---|
-| `f_MV = false` | HV | Low-Side-Schalter | High-Side-Schalter |
-| `f_MV = true` | MV | Low-Side-Schalter | DUT-Board |
+| `f_MV = false` | HV | Interrupteur low-side | Interrupteur high-side |
+| `f_MV = true` | MV | Interrupteur low-side | DUT board |
 
-Die Logdatei besitzt in beiden Modi dieselben Spalten `t0` und `t1`. Nur die
-physikalische Bedeutung von `t1` ändert sich.
+Le fichier log possede les memes colonnes `t0` et `t1` dans les deux modes.
+Seule la signification physique de `t1` change.
 
-Der Parser speichert deshalb:
+Le parseur stocke donc :
 
 ```python
 TempMode.HV
 ```
 
-oder:
+ou :
 
 ```python
 TempMode.MV
 ```
 
-Glitch-Erkennung kann weiterhin auf den Rohspalten arbeiten. Diagramme
-verwenden den Modus später für die richtige Beschriftung.
+La detection des glitches peut continuer a travailler sur les colonnes brutes.
+Les diagrammes utiliseront plus tard le mode pour choisir le bon libelle.
 
-## 5. MTPX und geplante Testzeit
+## 5. MTPX et duree de test planifiee
 
-Datei:
+Fichier :
 
 ```text
 parsers/mtpx.py
 ```
 
-Die geplante Testzeit steht typischerweise im Template:
+La duree de test planifiee se trouve typiquement dans le template :
 
 ```json
 {
@@ -146,170 +147,186 @@ Die geplante Testzeit steht typischerweise im Template:
 }
 ```
 
-Der Parser wertet nur sichere mathematische Ausdrücke aus:
+Le parseur evalue uniquement des expressions mathematiques sures :
 
-- Addition
-- Subtraktion
-- Multiplikation
-- Division
-- positive und negative Zahlen
-- Klammern
+- addition
+- soustraction
+- multiplication
+- division
+- nombres positifs et negatifs
+- parentheses
 
-Beliebiger Python-Code wird nicht ausgeführt.
+Aucun code Python arbitraire n'est execute.
 
-Beispiel:
-
-```text
-1001 × 3600 = 3.603.600 Sekunden
-```
-
-Das entspricht:
+Exemple :
 
 ```text
-1001 Stunden
+1001 x 3600 = 3.603.600 secondes
 ```
 
-## 6. DATA-Dateien
+Cela correspond a :
 
-Datei:
+```text
+1001 heures
+```
+
+## 6. Fichiers DATA
+
+Fichier :
 
 ```text
 parsers/board_data.py
 ```
 
-Jedes Board besitzt eine `.data`-Datei mit Test- und Hardwareinformationen.
+Chaque board possede un fichier `.data` avec des informations de test et de
+firmware.
 
-Gelesene Werte:
+Valeurs lues :
 
 - `Test Info.Seconds`
-- Anzahl Zyklen
-- Hostname
-- IP-Adresse
-- MAC-Adresse
-- Hardwareversion
-- Firmwareversion
+- version du firmware
 
-Beispiel:
+Exemple :
 
 ```json
 {
   "Test Info": {
-    "Cycles": 0,
     "Seconds": 2305183.4
-  }
+  },
+  "HW History": [
+    {
+      "HW Info": {
+        "version": {
+          "fw": "9.0"
+        }
+      }
+    }
+  ]
 }
 ```
 
-Die gespeicherten Sekunden werden als Log-Stresszeit verwendet:
+Resultat :
 
 ```text
-Log-Stresszeit = Test Info.Seconds
+Duree de stress journalisee = Test Info.Seconds
+Version du firmware         = HW History[-1].HW Info.version.fw
 ```
 
-Negative oder ungültige Werte werden auf `0` gesetzt.
+Le hostname, l'adresse IP, l'adresse MAC, la version hardware et les cycles ne
+sont pas stockes. Ces valeurs ne sont pas une base de decision pour l'analyse
+DHTOL actuelle.
 
-## 7. Nachbelastungszeit
-
-Mit geplanter Zeit aus MTPX und Log-Stresszeit aus DATA kann die rechnerische
-Nachbelastung bestimmt werden:
+Les secondes stockees sont utilisees comme duree de stress journalisee :
 
 ```text
-Rechnerische Nachbelastung
-= max(0, geplante Testzeit − Log-Stresszeit)
+Duree de stress journalisee = Test Info.Seconds
 ```
 
-Beispiel:
+Les valeurs negatives ou invalides sont remplacees par `0`.
+
+## 7. Duree de post-stress
+
+Avec la duree planifiee depuis MTPX et la duree de stress journalisee depuis
+DATA, le post-stress mathematique peut etre determine :
 
 ```text
-Geplant:       10 Stunden
-Geloggter Test: 8 Stunden
-Differenz:      2 Stunden
+Post-stress mathematique
+= max(0, duree de test planifiee - duree de stress journalisee)
 ```
 
-Diese Differenz ist zunächst nur rechnerisch. Ob das Board nach dem letzten
-Board-Log tatsächlich weiter bestromt wurde, wird später mit PSU-/EL- oder
-Host-Stromdaten geprüft.
+Exemple :
 
-## 8. Testlauferkennung
+```text
+Planifie :       10 heures
+Test journalise : 8 heures
+Difference :      2 heures
+```
 
-Datei:
+Cette difference est d'abord seulement mathematique. Si le board a vraiment
+continue a etre alimente apres le dernier log board, cela sera verifie plus
+tard avec les donnees de courant PSU/EL ou host.
+
+## 8. Detection des campagnes de test
+
+Fichier :
 
 ```text
 parsers/folder_loader.py
 ```
 
-Ein Ordner kann mehrere Konfigurationen enthalten:
+Un dossier peut contenir plusieurs configurations :
 
-- Haupttest
-- alternative Temperaturkonfiguration
-- Single-Board-Test
-- Systemcheck
-- Unterordner mit weiteren Versuchen
+- test principal
+- configuration de temperature alternative
+- test single-board
+- systemcheck
+- sous-dossiers avec d'autres essais
 
-Diese Dateien dürfen nicht zu einem falschen Testlauf zusammengeführt werden.
+Ces fichiers ne doivent pas etre fusionnes dans une mauvaise campagne de test.
 
-Der Loader gruppiert nach:
+Le loader groupe selon :
 
-- Unterordner
-- Testfamilie
-- Zonenname
-- Temperatur und Testparameter
+- sous-dossier
+- famille de test
+- nom de zone
+- temperature et parametres de test
 
-Zonen A, B und C derselben Testfamilie können gemeinsam geladen werden.
-Unterschiedliche Temperaturen oder Unterordner bleiben getrennte Testläufe.
+Les zones A, B et C de la meme famille de test peuvent etre chargees ensemble.
+Des temperatures differentes ou des sous-dossiers differents restent des
+campagnes de test separees.
 
-Unterstützte Größen:
+Tailles prises en charge :
 
 ```text
-1 Zone  × 8 Boards  = 8 Boards
-3 Zonen × 8 Boards  = 24 Boards
+1 zone  x 8 boards  = 8 boards
+3 zones x 8 boards  = 24 boards
 ```
 
-## 9. Fehlerbehandlung
+## 9. Gestion des erreurs
 
-Parser sollen bei einer fehlerhaften Datei nicht die gesamte Analyse
-abbrechen.
+Les parseurs ne doivent pas interrompre toute l'analyse a cause d'un seul
+fichier defectueux.
 
-Beispiele:
+Exemples :
 
-- beschädigte JSON-Datei → Warnung
-- fehlende MTPX-Datei → geplante Zeit fehlt
-- ungültiger Ovenplan-Eintrag → Eintrag wird übersprungen
-- fehlende DATA-Datei → Stresszeit bleibt `0`
-- freie DUT-Bezeichnung → Board bleibt nutzbar
+- fichier JSON endommage -> avertissement
+- fichier MTPX manquant -> duree planifiee absente
+- entree ovenplan invalide -> entree ignoree
+- fichier DATA manquant -> duree de stress reste `0`
+- designation DUT libre -> board reste utilisable
 
-Warnungen werden im `TestRun` gesammelt und später in der Oberfläche
-angezeigt.
+Les avertissements sont collectes dans le `TestRun`, puis affiches plus tard
+dans l'interface.
 
 ## 10. Tests
 
-Woche 2 besitzt automatisierte Tests für:
+La semaine 2 possede des tests automatises pour :
 
-- Ovenplan und Zone
-- HV-/MV-Erkennung
-- freie DUT-Namen
-- sichere MTPX-Berechnung
-- DATA-Hardwareinformationen
-- mehrere getrennte Testläufe
-- verschachtelte Testordner
-- drei Zonen mit 24 Boards
-- Gruppierung täglicher Boarddateien
+- ovenplan et zone
+- detection HV/MV
+- noms DUT libres
+- calcul MTPX securise
+- informations hardware DATA
+- plusieurs campagnes de test separees
+- dossiers de test imbriques
+- trois zones avec 24 boards
+- groupement de fichiers board quotidiens
 
-Testbefehl:
+Commande de test :
 
 ```bash
 pytest -q
 ```
 
-## 11. Ergebnis von Woche 2
+## 11. Resultat de la semaine 2
 
-Nach Woche 2 kann die Anwendung aus einem unbekannten Testordner automatisch
-eine strukturierte Testbeschreibung erzeugen:
+Apres la semaine 2, l'application peut generer automatiquement une description
+structuree de test depuis un dossier de test inconnu :
 
 ```text
-Testlauf
-├── geplante Testzeit
-├── Ofentemperatur
+Campagne de test
+├── duree de test planifiee
+├── temperature du four
 ├── Zone A
 │   ├── Position 1
 │   ├── Position 2
@@ -318,10 +335,10 @@ Testlauf
 └── Zone C
 ```
 
-Damit ist die Grundlage für Woche 3 vorhanden:
+C'est la base pour la semaine 3 :
 
-- Board-Logs einlesen
-- TDMS-Stromdaten einlesen
-- Fehler erkennen
-- Temperatur-Glitches analysieren
-- tatsächliche Nachbelastung über Stromabfall bestätigen
+- lire les logs board
+- lire les donnees de courant TDMS
+- detecter les erreurs
+- analyser les glitches de temperature
+- confirmer le vrai post-stress via chute de courant
