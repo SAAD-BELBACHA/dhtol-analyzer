@@ -1,65 +1,65 @@
-# Woche 2 - Konfigurations- und Metadatenparser
+# Semaine 2 - Parseurs de configuration et de métadonnées
 
-## 1. Wochenziel
+## 1. Objectif de la semaine
 
-Woche 2 verbindet echte DHTOL-Dateien mit den schlanken Datenmodellen aus
-Woche 1.
+La semaine 2 relie de vrais fichiers DHTOL aux modèles de données légers de la
+semaine 1.
 
-Der Code liest drei Dateitypen:
+Le code lit trois types de fichiers :
 
 ```text
-JSON → Testkonfiguration und Ovenplan
-MTPX → geplante Testzeit
-DATA → geloggte Board-Stresszeit und Firmwareversion
+JSON → configuration de test et ovenplan
+MTPX → durée de test planifiée
+DATA → durée de stress journalisée du board et version firmware
 ```
 
-Der oeffentliche Stand bleibt bewusst klein. LOG-, TDMS-, Streamlit- und
-Glitch-Code sind noch nicht Teil dieses GitHub-Stands.
+L'état public reste volontairement petit. Le code LOG, TDMS, Streamlit et
+glitch ne fait pas encore partie de cet état GitHub.
 
-## 2. Benutzte Bibliotheken
+## 2. Bibliothèques utilisées
 
-Nur Standardbibliothek plus `pytest` fuer Tests:
+Seulement la bibliothèque standard plus `pytest` pour les tests :
 
-| Bibliothek | Einsatz |
+| Bibliothèque | Utilisation |
 |---|---|
-| `json` | JSON-, MTPX- und DATA-Dateien laden |
-| `re` | Zone, DUT-ID, `f_MV` und Stop-Time-Fallback suchen |
-| `pathlib.Path` | Dateipfade plattformunabhaengig behandeln |
-| `dataclasses` | Parser-Ergebnisse als klare Objekte |
-| `enum` | feste Werte fuer Zone und Temperaturmodus |
-| `ast` | sichere Auswertung von MTPX-Matheausdruecken |
-| `operator` | erlaubte Rechenoperationen `+`, `-`, `*`, `/` |
-| `pytest` | automatisierte Tests |
+| `json` | charger les fichiers JSON, MTPX et DATA |
+| `re` | chercher zone, ID DUT, `f_MV` et stop-time fallback |
+| `pathlib.Path` | gérer les chemins de fichiers de manière portable |
+| `dataclasses` | représenter les résultats des parseurs comme objets clairs |
+| `enum` | valeurs fixes pour zone et mode de température |
+| `ast` | évaluer sûrement les expressions mathématiques MTPX |
+| `operator` | opérations autorisées `+`, `-`, `*`, `/` |
+| `pytest` | tests automatisés |
 
-`requirements.txt` enthaelt deshalb nur:
+`requirements.txt` contient donc seulement :
 
 ```text
 pytest>=8.0
 ```
 
-## 3. JSON-Testkonfiguration
+## 3. Configuration de test JSON
 
-Datei:
+Fichier :
 
 ```text
 parsers/config_json.py
 ```
 
-Der Parser liest:
+Le parseur lit :
 
-- Testname
-- Zone
-- Instrumentliste
-- Ovenplan
-- Slot beziehungsweise Position
-- DUT-Name
-- Hardware-Target
-- Load-Board
-- DUT-Board
-- uC-FSM
-- HV-/MV-Modus ueber `f_MV`
+- nom du test ;
+- zone ;
+- liste des instruments ;
+- ovenplan ;
+- slot ou position ;
+- nom DUT ;
+- hardware target ;
+- load board ;
+- DUT board ;
+- uC-FSM ;
+- mode HV/MV via `f_MV`.
 
-Beispiel:
+Exemple :
 
 ```json
 {
@@ -78,7 +78,7 @@ Beispiel:
 }
 ```
 
-Ergebnis:
+Résultat :
 
 ```text
 test_name     = run_A_test
@@ -90,11 +90,11 @@ dut_name      = 88_1_2
 hw_target     = 01be8edd
 ```
 
-### Freie DUT-Namen
+### Noms DUT libres
 
-Nicht jeder Test nutzt Namen wie `88_1_2`.
+Tous les tests n'utilisent pas des noms comme `88_1_2`.
 
-Auch das ist gueltig:
+Ceci est aussi valide :
 
 ```json
 {
@@ -105,7 +105,7 @@ Auch das ist gueltig:
 }
 ```
 
-Ergebnis:
+Résultat :
 
 ```text
 controller_id = None
@@ -113,34 +113,34 @@ position      = 2
 dut_name      = aa
 ```
 
-## 4. HV- und MV-Erkennung
+## 4. Détection HV et MV
 
-Der Modus steht im Testplan-Code:
+Le mode se trouve dans le code du plan de test :
 
 ```lua
 f_MV = false
 ```
 
-Zuordnung:
+Correspondance :
 
-| Wert | Modus |
+| Valeur | Mode |
 |---|---|
 | `f_MV = false` | `TempMode.HV` |
 | `f_MV = true` | `TempMode.MV` |
-| fehlt | `TempMode.HV` als Default |
+| absent | `TempMode.HV` par défaut |
 
-Der Parser durchsucht verschachtelte Strings in `Testplans`. Dadurch ist er
-unabhaengig davon, wie tief der Code im JSON liegt.
+Le parseur parcourt les chaînes imbriquées dans `Testplans`. Il reste donc
+indépendant de la profondeur exacte du code dans le JSON.
 
-## 5. MTPX und geplante Testzeit
+## 5. MTPX et durée de test planifiée
 
-Datei:
+Fichier :
 
 ```text
 parsers/mtpx.py
 ```
 
-Typischer Inhalt:
+Contenu typique :
 
 ```json
 {
@@ -153,55 +153,55 @@ Typischer Inhalt:
 }
 ```
 
-Ausgabe:
+Sortie :
 
 ```text
 planned_test_seconds = 3603600
 ```
 
-### Warum kein `eval()`?
+### Pourquoi pas `eval()` ?
 
-`templateValue` ist Text. Gefaehrlich waere:
+`templateValue` est du texte. Ceci serait dangereux :
 
 ```python
 eval("1001*3600")
 ```
 
-Darum nutzt der Parser `ast` und erlaubt nur:
+Le parseur utilise donc `ast` et autorise seulement :
 
-- Zahlen
-- Klammern
-- Addition
-- Subtraktion
-- Multiplikation
-- Division
+- nombres ;
+- parenthèses ;
+- addition ;
+- soustraction ;
+- multiplication ;
+- division.
 
-Dieser Ausdruck ist erlaubt:
+Cet exemple est accepté :
 
 ```text
 1001*3600
 ```
 
-Dieser Ausdruck wird abgelehnt:
+Cet exemple est refusé :
 
 ```text
 __import__('os').system('echo no')
 ```
 
-## 6. DATA-Dateien
+## 6. Fichiers DATA
 
-Datei:
+Fichier :
 
 ```text
 parsers/board_data.py
 ```
 
-Woche 2 speichert nur:
+La semaine 2 stocke seulement :
 
-- `Test Info.Seconds`
-- letzte Firmwareversion aus `HW History[-1].HW Info.version.fw`
+- `Test Info.Seconds` ;
+- dernière version firmware depuis `HW History[-1].HW Info.version.fw`.
 
-Beispiel:
+Exemple :
 
 ```json
 {
@@ -225,79 +225,81 @@ Beispiel:
 }
 ```
 
-Ergebnis:
+Résultat :
 
 ```text
 log_stress_seconds = 123.5
 firmware_version   = 9.0
 ```
 
-Bewusst nicht gespeichert:
+Volontairement non stockés :
 
-- `Cycles`
-- `hostname`
-- `IP`
-- `MAC`
-- Hardwareversion `hw`
+- `Cycles` ;
+- `hostname` ;
+- `IP` ;
+- `MAC` ;
+- version hardware `hw`.
 
-Grund: Diese Werte werden im aktuellen Auswertestand nicht benutzt. Sie koennen
-spaeter wieder eingefuehrt werden, wenn eine Analyse sie wirklich braucht.
+Raison : ces valeurs ne sont pas utilisées dans l'état actuel de l'analyse.
+Elles pourront être réintroduites plus tard si une analyse en a vraiment
+besoin.
 
-## 7. Fehlerbehandlung
+## 7. Gestion des erreurs
 
-Parser sollen bei einer einzelnen kaputten Datei nicht hart abbrechen.
+Les parseurs ne doivent pas s'arrêter brutalement à cause d'un seul fichier
+endommagé.
 
-Verhalten:
+Comportement :
 
-- kaputte JSON-Datei → leeres `ParsedConfig` plus Warnung
-- fehlende oder kaputte MTPX-Datei → `None`
-- fehlende oder kaputte DATA-Datei → `None`
-- ungueltiger Ovenplan-Eintrag → Eintrag wird uebersprungen
-- freier DUT-Name → gueltig, `controller_id = None`
+- fichier JSON endommagé → `ParsedConfig` vide plus avertissement ;
+- fichier MTPX manquant ou endommagé → `None` ;
+- fichier DATA manquant ou endommagé → `None` ;
+- entrée ovenplan invalide → entrée ignorée ;
+- nom DUT libre → valide, `controller_id = None`.
 
 ## 8. Tests
 
-Datei:
+Fichier :
 
 ```text
 tests/test_week_02_parsers.py
 ```
 
-Getestet wird:
+Les tests vérifient :
 
-- JSON-Ovenplan
-- Zone A/B/C
-- HV-/MV-Erkennung
-- freie DUT-Namen
-- Warnung bei kaputtem JSON
-- sichere MTPX-Berechnung
-- Ablehnung von ausfuehrbarem MTPX-Ausdruck
-- DATA-Stresszeit
-- DATA-Firmwareversion
-- Entfernen ungenutzter DATA-Felder aus `BoardMetadata`
+- ovenplan JSON ;
+- zones A/B/C ;
+- détection HV/MV ;
+- noms DUT libres ;
+- avertissement pour JSON endommagé ;
+- calcul MTPX sûr ;
+- refus d'une expression MTPX exécutable ;
+- durée de stress DATA ;
+- version firmware DATA ;
+- suppression des champs DATA inutilisés dans `BoardMetadata`.
 
-Testbefehl:
+Commande de test :
 
 ```bash
 pytest -q
 ```
 
-## 9. Ergebnis von Woche 2
+## 9. Résultat de la semaine 2
 
-Nach Woche 2 kann der Code einzelne Konfigurations- und Metadatendateien
-sicher in Python-Objekte umwandeln:
+Après la semaine 2, le code peut transformer des fichiers individuels de
+configuration et de métadonnées en objets Python sûrs :
 
 ```text
 JSON → ParsedConfig + OvenplanEntry
-MTPX → geplante Testzeit in Sekunden
-DATA → BoardMetadata mit Stresszeit + Firmwareversion
+MTPX → durée de test planifiée en secondes
+DATA → BoardMetadata avec durée de stress + firmware
 ```
 
-Naechste Schritte:
+Prochaines étapes :
 
-- zusammengehoerige Testordner erkennen
-- Board-Logs einlesen
-- TDMS-Stromdaten einlesen
-- Fehler erkennen
-- Temperatur-Glitches analysieren
-- Streamlit-Oberflaeche bauen
+- reconnaître les dossiers de test appartenant à la même campagne ;
+- lire les logs board ;
+- lire les données de courant TDMS ;
+- détecter les défauts ;
+- analyser les glitches de température ;
+- construire l'interface Streamlit.

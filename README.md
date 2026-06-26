@@ -1,47 +1,48 @@
 # DHTOL Analyzer
 
-Lernprojekt zur automatischen Auswertung von DHTOL-Testläufen.
+Projet d'apprentissage pour l'évaluation automatique de campagnes de test
+DHTOL.
 
-## Aktueller Stand: Woche 2
+## État actuel : semaine 2
 
-Fundament und Dateiparser fertig:
+La fondation et les parseurs de fichiers sont terminés :
 
-- schlanke Datenmodelle für Parser-Ergebnisse
-- geplante und geloggte Stresszeit
-- rechnerische Nachbelastungslogik dokumentiert
-- Unterstützung für Zonen A, B und C
-- JSON-Testkonfiguration und Ovenplan
-- automatische HV-/MV-Erkennung über `f_MV`
-- geplante Testzeit aus MTPX
-- Board-Laufzeit und Firmwareversion aus DATA
+- modèles de données légers pour les résultats des parseurs ;
+- durée de stress planifiée et durée de stress journalisée ;
+- logique de post-stress mathématique documentée ;
+- prise en charge des zones A, B et C ;
+- configuration de test JSON et ovenplan ;
+- détection automatique HV/MV via `f_MV` ;
+- durée de test planifiée depuis MTPX ;
+- durée de fonctionnement du board et version du firmware depuis DATA.
 
-Dokumentation:
+Documentation :
 
-- [Woche 1 – Fundament](docs/week-01-foundation.md)
-- [Woche 2 – Konfigurations- und Metadatenparser](docs/week-02-parsers.md)
+- [Semaine 1 - Fondation](docs/week-01-foundation.md)
+- [Semaine 2 - Parseurs de configuration et de métadonnées](docs/week-02-parsers.md)
 
-## Nachbelastungslogik
-
-```text
-Nachbelastungszeit = max(0, geplante Testzeit − Log-Stresszeit)
-```
-
-Beispiel aus echtem Testlauf:
+## Logique de post-stress
 
 ```text
-Geplante Testzeit:  1001,000 h
-Log-Stresszeit:      640,327 h
-Nachbelastungszeit:  360,673 h
+Durée de post-stress = max(0, durée de test planifiée - durée de stress journalisée)
 ```
 
-Die spätere PSU/EL-Analyse muss bestätigen, ob DUT während dieser Zeit
-tatsächlich weiter unter Stress stand.
+Exemple issu d'une vraie campagne de test :
 
-## Monatsplan
+```text
+Durée de test planifiée :       1001,000 h
+Durée de stress journalisée :    640,327 h
+Durée de post-stress :           360,673 h
+```
 
-- Woche 1: schlanke Parser-Datenmodelle — abgeschlossen
-- Woche 2: JSON-, MTPX- und DATA-Parser — abgeschlossen
-- Woche 3: LOG-/TDMS-Parser und Analyse
-- Woche 4: Streamlit-Oberfläche, Graphen und Gesamttests
+L'analyse PSU/EL ultérieure doit confirmer si le DUT est vraiment resté sous
+stress pendant cette période.
 
-Rohdaten bleiben lokal und werden durch `.gitignore` nicht hochgeladen.
+## Plan mensuel
+
+- Semaine 1 : modèles de données légers pour les parseurs - terminé
+- Semaine 2 : parseurs JSON, MTPX et DATA - terminé
+- Semaine 3 : parseurs LOG/TDMS et analyse
+- Semaine 4 : interface Streamlit, graphes et tests globaux
+
+Les données brutes restent locales et ne sont pas envoyées grâce à `.gitignore`.

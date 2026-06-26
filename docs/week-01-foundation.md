@@ -1,36 +1,37 @@
-# Woche 1 - Fundament: schlanke Parser-Datenmodelle
+# Semaine 1 - Fondation : modèles de données légers pour les parseurs
 
-## 1. Wochenziel
+## 1. Objectif de la semaine
 
-Woche 1 legt nur die gemeinsamen Python-Objekte an, die die Parser aus Woche 2
-wirklich brauchen.
+La semaine 1 crée uniquement les objets Python communs dont les parseurs de la
+semaine 2 ont réellement besoin.
 
-Der erste oeffentliche Stand soll klein bleiben:
+Le premier état public doit rester petit :
 
 ```text
 JSON / MTPX / DATA
         ↓
-      Parser
+      Parseurs
         ↓
 Zone, TempMode, OvenplanEntry, ParsedConfig, BoardMetadata
 ```
 
-Nicht enthalten sind bewusst:
+Sont volontairement exclus :
 
-- Streamlit-Oberflaeche
-- Board-Log-Zeitreihen
-- TDMS-Leser
-- Fehler-/Statusmodell
-- Temperatur-Glitch-Analyse
-- PSU-/EL-Stromauswertung
+- interface Streamlit ;
+- séries temporelles des logs board ;
+- lecteur TDMS ;
+- modèle de défaut/statut ;
+- analyse des glitches de température ;
+- analyse du courant PSU/EL.
 
-Diese Teile folgen spaeter, wenn sie auch durch echten Code benutzt werden.
+Ces parties suivent plus tard, quand elles sont aussi utilisées par du vrai
+code.
 
-## 2. Warum Dataclasses?
+## 2. Pourquoi des dataclasses ?
 
-Parser sollen keine freien Dictionaries zurueckgeben.
+Les parseurs ne doivent pas renvoyer des dictionnaires libres.
 
-Freies Dictionary:
+Dictionnaire libre :
 
 ```python
 entry = {
@@ -40,7 +41,7 @@ entry = {
 }
 ```
 
-Strukturiertes Modell:
+Modèle structuré :
 
 ```python
 entry = OvenplanEntry(
@@ -52,17 +53,17 @@ entry = OvenplanEntry(
 )
 ```
 
-Vorteile:
+Avantages :
 
-- Feldnamen sind sichtbar
-- Typen sind dokumentiert
-- Tests koennen gezielt pruefen
-- Parser-Ergebnis bleibt stabil
-- spaetere Analyse muss keine JSON-Rohstruktur kennen
+- les noms de champs sont visibles ;
+- les types sont documentés ;
+- les tests peuvent vérifier précisément le résultat ;
+- le résultat du parseur reste stable ;
+- l'analyse ultérieure n'a pas besoin de connaître la structure JSON brute.
 
-## 3. Warum Enums?
+## 3. Pourquoi des enums ?
 
-Enums begrenzen erlaubte Werte.
+Les enums limitent les valeurs autorisées.
 
 ```python
 class Zone(Enum):
@@ -71,45 +72,46 @@ class Zone(Enum):
     C = "C"
 ```
 
-Dadurch speichern Parser nicht versehentlich Werte wie `"zone-a"` oder `"AA"`.
+Ainsi, les parseurs ne stockent pas par erreur des valeurs comme `"zone-a"` ou
+`"AA"`.
 
-Aktive Enums:
+Enums actives :
 
-| Enum | Zweck |
+| Enum | But |
 |---|---|
-| `Zone` | Ofenzone A, B oder C |
-| `TempMode` | HV- oder MV-Betrieb |
+| `Zone` | Zone du four A, B ou C |
+| `TempMode` | Fonctionnement HV ou MV |
 
-## 4. Controller-ID und Position
+## 4. Controller ID et position
 
-Echte DUT-Namen koennen so aussehen:
+Les vrais noms DUT peuvent ressembler à ceci :
 
 ```text
 88_1_2
 ```
 
-Daraus wird nur die erste Zahl als Controller-ID gelesen:
+Seul le premier nombre est lu comme controller ID :
 
 ```text
 controller_id = 88
 ```
 
-Die Ofenposition kommt aus dem Ovenplan-Feld `Slot`:
+La position dans le four vient du champ ovenplan `Slot` :
 
 ```text
 position = 1
 ```
 
-Wichtig:
+Important :
 
 ```text
-Controller-ID != Board-Position
+Controller ID != position du board
 ```
 
-Controller `88` steht im Beispiel auf Position `1`. Diese Trennung verhindert
-spaeter falsche Board-Zuordnungen.
+Dans l'exemple, le contrôleur `88` se trouve à la position `1`. Cette séparation
+évite plus tard les mauvaises attributions de boards.
 
-Freie DUT-Namen bleiben erlaubt:
+Les noms DUT libres restent autorisés :
 
 ```text
 aa
@@ -117,19 +119,20 @@ bb
 cc
 ```
 
-Dann gilt:
+Dans ce cas :
 
 ```text
 controller_id = None
 ```
 
-Zone, Position, DUT-Name und Hardware-Target bleiben trotzdem vorhanden.
+La zone, la position, le nom DUT et le hardware target restent tout de même
+disponibles.
 
-## 5. Modelle
+## 5. Modèles
 
 ### `OvenplanEntry`
 
-Ein Eintrag aus dem JSON-Ovenplan:
+Une entrée du JSON ovenplan :
 
 ```python
 @dataclass
@@ -146,7 +149,8 @@ class OvenplanEntry:
 
 ### `ParsedConfig`
 
-Gesamter Inhalt einer JSON-Testkonfiguration, soweit Woche 2 ihn braucht:
+Contenu complet d'une configuration de test JSON, dans la limite des besoins de
+la semaine 2 :
 
 ```python
 @dataclass
@@ -160,12 +164,12 @@ class ParsedConfig:
     warnings: list[str] = field(default_factory=list)
 ```
 
-`warnings` sammelt lesbare Probleme, ohne die komplette Analyse sofort
-abzubrechen.
+`warnings` collecte les problèmes lisibles sans interrompre immédiatement toute
+l'analyse.
 
 ### `BoardMetadata`
 
-Woche 2 speichert aus `.data` nur Werte, die aktuell genutzt werden:
+La semaine 2 ne stocke depuis `.data` que les valeurs actuellement utilisées :
 
 ```python
 @dataclass
@@ -175,20 +179,20 @@ class BoardMetadata:
     source_path: Optional[Path] = None
 ```
 
-Nicht gespeichert:
+Non stockés :
 
-- Hostname
-- IP-Adresse
-- MAC-Adresse
-- Hardwareversion
-- Zyklen
+- hostname ;
+- adresse IP ;
+- adresse MAC ;
+- version hardware ;
+- cycles.
 
-Diese Felder stehen teilweise in `.data`, sind aber fuer die aktuelle
-DHTOL-Auswertung keine Entscheidungsbasis.
+Ces champs existent parfois dans `.data`, mais ne servent pas de base de
+décision pour l'évaluation DHTOL actuelle.
 
-## 6. Geplante und geloggte Stresszeit
+## 6. Durée de stress planifiée et journalisée
 
-Die geplante Testzeit kommt spaeter aus MTPX:
+La durée de test planifiée vient plus tard de MTPX :
 
 ```json
 {
@@ -197,7 +201,7 @@ Die geplante Testzeit kommt spaeter aus MTPX:
 }
 ```
 
-Die geloggte Board-Stresszeit kommt aus DATA:
+La durée de stress journalisée du board vient de DATA :
 
 ```json
 {
@@ -207,20 +211,21 @@ Die geloggte Board-Stresszeit kommt aus DATA:
 }
 ```
 
-Rechnerische Nachbelastung bleibt als Projektregel dokumentiert:
+Le post-stress mathématique reste documenté comme règle du projet :
 
 ```text
-Nachbelastungszeit = max(0, geplante Testzeit - geloggte Stresszeit)
+Durée de post-stress = max(0, durée de test planifiée - durée de stress journalisée)
 ```
 
-Der Code in Woche 1/2 speichert die beiden Rohwerte. Die bestaetigte
-Nachbelastung ueber Stromdaten folgt spaeter.
+Le code des semaines 1 et 2 stocke les deux valeurs brutes. La confirmation du
+post-stress via les données de courant suit plus tard.
 
-## 7. Rohdatenschutz
+## 7. Protection des données brutes
 
-Messordner koennen sehr gross sein. Rohdaten gehoeren nicht ins Repository.
+Les dossiers de mesure peuvent être très volumineux. Les données brutes n'ont
+pas leur place dans le repository.
 
-`.gitignore` blockiert deshalb:
+`.gitignore` bloque donc :
 
 ```text
 *.tdms
@@ -231,23 +236,23 @@ Messordner koennen sehr gross sein. Rohdaten gehoeren nicht ins Repository.
 *.mtpx
 ```
 
-GitHub enthaelt nur Quellcode, Tests und Dokumentation.
+GitHub contient uniquement le code source, les tests et la documentation.
 
-## 8. Ergebnis Woche 1
+## 8. Résultat de la semaine 1
 
-Fertig:
+Terminé :
 
-- schlanke Parser-Datenmodelle
-- klare Zonenwerte A/B/C
-- HV-/MV-Modus als Enum
-- getrennte Controller-ID und Slot-Position
-- BoardMetadata nur mit genutzten DATA-Werten
-- Rohdatenschutz ueber `.gitignore`
+- modèles de données légers pour les parseurs ;
+- valeurs de zone claires A/B/C ;
+- mode HV/MV sous forme d'enum ;
+- controller ID et position de slot séparés ;
+- `BoardMetadata` limité aux valeurs DATA utilisées ;
+- protection des données brutes via `.gitignore`.
 
-Noch nicht Teil von Woche 1:
+Pas encore inclus dans la semaine 1 :
 
-- Statusmodell
-- Fault-Modell
-- Measurement-Zeitreihenmodell
-- TestRun-/ZoneData-Gesamtmodell
-- zentrale Analyse-Konfiguration
+- modèle de statut ;
+- modèle de défaut ;
+- modèle de séries temporelles `Measurement` ;
+- modèles globaux `TestRun` et `ZoneData` ;
+- configuration centrale d'analyse.
