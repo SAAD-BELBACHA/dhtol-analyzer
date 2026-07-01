@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-
-import pandas as pd
 
 from models.data_models import FaultType, TempMode, Zone
 from parsers.board_data import parse_board_data
-from parsers.board_log import parse_board_log, parse_board_logs_for_plot
+from parsers.board_log import (
+    available_log_seconds,
+    measurement_time_bounds,
+    parse_board_log,
+    parse_board_logs_for_plot,
+)
 from parsers.config_json import parse_config_json
 from parsers.mtpx import parse_planned_test_seconds
-from parsers.tdms_reader import combine_instrument_currents
 
 
 def test_config_json_parses_ovenplan(tmp_path: Path) -> None:
@@ -85,7 +87,7 @@ def test_mtpx_parses_safe_stop_time_expression(tmp_path: Path) -> None:
     assert parse_planned_test_seconds(source) == 36_000
 
 
-def test_board_data_parses_latest_hardware(tmp_path: Path) -> None:
+def test_board_data_parses_stress_time_and_firmware_only(tmp_path: Path) -> None:
     source = tmp_path / "board.data"
     source.write_text(
         json.dumps(
@@ -110,7 +112,12 @@ def test_board_data_parses_latest_hardware(tmp_path: Path) -> None:
 
     assert metadata is not None
     assert metadata.log_stress_seconds == 123.5
-    assert metadata.hardware_version == "5.0"
+    assert metadata.firmware_version == "9.0"
+    assert not hasattr(metadata, "cycles")
+    assert not hasattr(metadata, "hostname")
+    assert not hasattr(metadata, "ip_address")
+    assert not hasattr(metadata, "mac_address")
+    assert not hasattr(metadata, "hardware_version")
 
 
 def test_board_log_skips_broken_rows(tmp_path: Path) -> None:
@@ -127,6 +134,30 @@ def test_board_log_skips_broken_rows(tmp_path: Path) -> None:
     assert len(parsed.measurements) == 1
     assert len(parsed.events) == 1
     assert parsed.skipped_lines == 1
+
+
+def test_available_log_seconds_uses_real_file_coverage(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "board.2026-01-01.log"
+    first.write_text(
+        "2026-01-01 00:00:00\t1;2;3;4;5;6;7;8\n"
+        "2026-01-01 01:00:00\t1;2;3;4;5;6;7;8\n",
+        encoding="utf-8",
+    )
+    second = tmp_path / "board.2026-01-02.log"
+    second.write_text(
+        "2026-01-02 00:00:00\t1;2;3;4;5;6;7;8\n"
+        "2026-01-02 02:00:00\t1;2;3;4;5;6;7;8\n"
+        "2026-01-02 02:00:01\tOC err\n",
+        encoding="utf-8",
+    )
+
+    assert measurement_time_bounds(first) == (
+        datetime(2026, 1, 1, 0, 0),
+        datetime(2026, 1, 1, 1, 0),
+    )
+    assert available_log_seconds([first, second]) == 3 * 3600
 
 
 def test_board_plot_logs_group_multiple_days_and_keep_events(
@@ -154,17 +185,3 @@ def test_board_plot_logs_group_multiple_days_and_keep_events(
     assert parsed.measurements["timestamp"].dt.day.max() == 2
     assert len(parsed.events) == 1
     assert parsed.events[0].fault_type is FaultType.OC
-
-
-def test_psu_and_el_currents_are_combined() -> None:
-    start = datetime(2026, 1, 1)
-    psu = pd.Series([9.4, 9.5], index=[start, start + timedelta(seconds=3)])
-    el = pd.Series(
-        [6.6, 6.5],
-        index=[start + timedelta(milliseconds=200), start + timedelta(seconds=3.2)],
-    )
-
-    combined = combine_instrument_currents(psu, el)
-
-    assert combined is not None
-    assert combined.tolist() == [16.0, 16.0]

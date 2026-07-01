@@ -93,11 +93,6 @@ class ParsedConfig:
 @dataclass
 class BoardMetadata:
     log_stress_seconds: float = 0.0
-    cycles: int = 0
-    hostname: str = ""
-    ip_address: str = ""
-    mac_address: str = ""
-    hardware_version: str = ""
     firmware_version: str = ""
     source_path: Optional[Path] = None
 
@@ -111,7 +106,9 @@ class Board:
     hw_target: str
     nenn_strom_a: float
     temp_mode: TempMode = TempMode.HV
+    available_log_seconds: float = 0.0
     log_stress_seconds: float = 0.0
+    log_gap_current_confirmed: Optional[bool] = None
     faults: list[Fault] = field(default_factory=list)
     glitches: list[GlitchEvent] = field(default_factory=list)
     t0_sensor_dead: bool = False
@@ -119,7 +116,6 @@ class Board:
     metadata: Optional[BoardMetadata] = None
     data_path: Optional[Path] = None
     log_paths: list[Path] = field(default_factory=list)
-    mqtt_paths: list[Path] = field(default_factory=list)
 
 # Prüft: Gibt es mindestens einen echten Fehler?
     
@@ -131,14 +127,22 @@ class Board:
             return Status.ORANGE
         return Status.GREEN
 
+    @property
+    def missing_log_seconds(self) -> float:
+        return max(0.0, self.log_stress_seconds - self.available_log_seconds)
+
+    @property
+    def effective_stress_seconds(self) -> float:
+        if self.log_stress_seconds > 0:
+            return self.log_stress_seconds
+        return self.available_log_seconds
+
 
 @dataclass
 class ZoneData:
     zone: Zone
     boards: list[Board] = field(default_factory=list)
     total_current_series: object = None
-    psu_paths: list[Path] = field(default_factory=list)
-    el_paths: list[Path] = field(default_factory=list)
     host_log_paths: list[Path] = field(default_factory=list)
 
 
@@ -157,4 +161,7 @@ class TestRun:
         return [board for zone in self.zones for board in zone.boards]
 
     def nachbelastung_seconds_for(self, board: Board) -> float:
-        return max(0.0, self.planned_test_seconds - board.log_stress_seconds)
+        return max(
+            0.0,
+            self.planned_test_seconds - board.effective_stress_seconds,
+        )

@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from config import LOG_COVERAGE_WARNING_SECONDS
 from models.data_models import Fault, FaultType, TestRun
 
 
@@ -56,21 +57,38 @@ def align_measurements_to_stress_start(
 
 def stress_time_chart(run: TestRun) -> go.Figure:
     boards = run.all_boards
-    logged = [board.log_stress_seconds / 3600 for board in boards]
-    gaps = [
-        max(0.0, run.planned_test_seconds - board.log_stress_seconds) / 3600
+    data_stress = [board.effective_stress_seconds / 3600 for board in boards]
+    data_gaps = [
+        max(0.0, run.planned_test_seconds - board.effective_stress_seconds) / 3600
         for board in boards
     ]
     labels = [f"{board.zone.value}{board.position}: {board.dut_name}" for board in boards]
 
     figure = go.Figure()
-    figure.add_bar(name="Log-Stresszeit", x=labels, y=logged, marker_color="#2E86DE")
     figure.add_bar(
-        name="Rechnerische Nachbelastung",
+        name="DATA-Stresszeit",
         x=labels,
-        y=gaps,
+        y=data_stress,
+        marker_color="#2E86DE",
+    )
+    figure.add_bar(
+        name="Nachbelastung laut DATA",
+        x=labels,
+        y=data_gaps,
         marker_color="#F39C12",
     )
+    for label, board in zip(labels, boards):
+        if board.missing_log_seconds <= LOG_COVERAGE_WARNING_SECONDS:
+            continue
+        figure.add_annotation(
+            x=label,
+            y=(board.effective_stress_seconds / 3600) + 15,
+            text=f"⚠ Board-Log {board.missing_log_seconds / 3600:.2f} h kürzer",
+            showarrow=True,
+            arrowcolor="#FF4B4B",
+            font=dict(color="#FF4B4B"),
+            bgcolor="rgba(20,20,20,0.90)",
+        )
     figure.update_layout(
         barmode="stack",
         xaxis_title="Board",

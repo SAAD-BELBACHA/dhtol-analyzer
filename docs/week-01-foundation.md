@@ -319,7 +319,8 @@ doivent les confirmer ou les corriger dans les semaines suivantes.
 ## 13. Protection des donnees brutes dans le repository
 
 Le dossier de mesure fait environ 38 Go. Les fichiers TDMS, LOG, DATA, STORE et
-MTPX n'ont pas leur place dans Git.
+MTPX n'ont pas leur place dans Git. TDMS reste ignore comme donnee brute, mais
+n'est plus lu par l'application.
 
 `.gitignore` empeche un upload accidentel :
 
@@ -349,7 +350,7 @@ Termine :
 Pas encore inclus dans l'etat public de la semaine :
 
 - parseurs de fichiers
-- lecteur TDMS
+- lecteur des courants host-log
 - analyse des glitches
 - attribution du courant
 - interface Streamlit

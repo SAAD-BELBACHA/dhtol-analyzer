@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from analysis.stress_time import calculate_nachbelastung_seconds
+from config import LOG_COVERAGE_WARNING_SECONDS
 from models.data_models import Status, TestRun
 
 
@@ -21,9 +22,24 @@ def board_overview_frame(
     for board in run.all_boards:
         glitch = glitch_summary.get(board.dut_name, {})
         glitch_count = int(glitch.get("glitch_count", 0))
+        missing_log_seconds = board.missing_log_seconds
         status = board.status
-        if status is Status.GREEN and glitch_count:
+        if status is Status.GREEN and (
+            glitch_count
+            or missing_log_seconds > LOG_COVERAGE_WARNING_SECONDS
+        ):
             status = Status.ORANGE
+        if missing_log_seconds > LOG_COVERAGE_WARNING_SECONDS:
+            log_warning = (
+                f"⚠ {missing_log_seconds / 3600:.2f} h weniger Board-Logzeit als DATA · "
+                + (
+                    "Nachbelastung mit DATA"
+                    if board.log_gap_current_confirmed is True
+                    else "Strom nicht bestätigt"
+                )
+            )
+        else:
+            log_warning = "—"
         rows.append(
             {
                 "Zone": board.zone.value,
@@ -34,9 +50,23 @@ def board_overview_frame(
                 "DUT": board.dut_name,
                 "HW Target": board.hw_target,
                 "Status": STATUS_LABELS[status],
-                "Log-Stresszeit [h]": board.log_stress_seconds / 3600,
-                "Rechnerische Nachbelastung [h]": calculate_nachbelastung_seconds(
-                    run.planned_test_seconds, board.log_stress_seconds
+                "Hinweis": log_warning,
+                "DATA-Stresszeit [h]": board.log_stress_seconds / 3600,
+                "Board-Log-Stresszeit [h]": board.available_log_seconds / 3600,
+                "Abweichung DATA - Board-Logs [h]": missing_log_seconds / 3600,
+                "Strombestätigung": (
+                    "Bestätigt"
+                    if board.log_gap_current_confirmed is True
+                    else "Nicht bestätigt"
+                    if board.log_gap_current_confirmed is False
+                    else "Nicht nötig"
+                ),
+                "Nachbelastung laut DATA [h]": calculate_nachbelastung_seconds(
+                    run.planned_test_seconds, board.effective_stress_seconds
+                )
+                / 3600,
+                "Nachbelastung laut Board-Log [h]": calculate_nachbelastung_seconds(
+                    run.planned_test_seconds, board.available_log_seconds
                 )
                 / 3600,
                 "Glitches": glitch_count,

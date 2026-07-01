@@ -14,6 +14,7 @@ from analysis.stress_time import (
     calculate_planned_gap,
     confirm_nachbelastung_from_current,
 )
+from config import LOG_COVERAGE_WARNING_SECONDS
 from parsers.folder_loader import (
     available_board_dates,
     discover_test_runs,
@@ -22,6 +23,17 @@ from parsers.folder_loader import (
     load_zone_current,
 )
 from parsers.board_log import parse_board_logs_for_plot
+from parsers.tdms_diagnostics import (
+    compare_board_log_to_tdms,
+    compare_host_current_to_tdms,
+)
+from parsers.uploaded_archive import UploadedArchiveError, extract_uploaded_zip
+from reporting.pdf_report import (
+    PdfReportError,
+    build_pdf_report,
+    build_report_charts,
+    pdf_report_filename,
+)
 from visualization.charts import (
     align_measurements_to_stress_start,
     all_board_current_chart,
@@ -153,23 +165,123 @@ def fault_row(board, fault) -> dict[str, object]:
     }
 
 
+def _path_signature(path: Path) -> tuple[str, int, int]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (str(path), -1, -1)
+    return (str(path), stat.st_size, stat.st_mtime_ns)
+
+
+@st.cache_data(show_spinner=False)
+def compare_host_current_to_tdms_cached(
+    host_log_signature: tuple[str, int, int],
+    psu_tdms_signature: tuple[str, int, int],
+    el_tdms_signature: tuple[str, int, int],
+) -> pd.DataFrame:
+    return compare_host_current_to_tdms(
+        host_log_signature[0],
+        psu_tdms_signature[0],
+        el_tdms_signature[0],
+    )
+
+
+@st.cache_data(show_spinner=False)
+def compare_board_log_to_tdms_cached(
+    board_log_signature: tuple[str, int, int],
+    mqtt_tdms_signature: tuple[str, int, int],
+    hw_target: str,
+) -> pd.DataFrame:
+    return compare_board_log_to_tdms(
+        board_log_signature[0],
+        mqtt_tdms_signature[0],
+        hw_target,
+    )
+
+
+def _date_log_path(paths: list[Path], date: str) -> Path | None:
+    suffix = f".{date}.log"
+    return next((path for path in paths if path.name.endswith(suffix)), None)
+
+
+def _tdms_path_from_host_log(host_log_path: Path, date: str, marker: str) -> Path:
+    suffix = f".{date}.log"
+    test_name = host_log_path.name[: -len(suffix)]
+    return host_log_path.with_name(f"{test_name}-{marker}-{date}.tdms")
+
+
+def _tdms_path_from_board_log(
+    board_log_path: Path, dut_name: str, date: str
+) -> Path:
+    suffix = f".{dut_name}.{date}.log"
+    test_name = board_log_path.name[: -len(suffix)]
+    return board_log_path.with_name(f"{test_name}-mqtt-{date}.tdms")
+
+
+def _render_tdms_comparison(frame: pd.DataFrame) -> None:
+    if frame.empty:
+        st.warning("Keine TDMS-Vergleichsdaten.")
+        return
+    if frame["Status"].eq("OK").all():
+        st.success("LOG und TDMS stimmen innerhalb der Toleranzen überein.")
+    else:
+        st.warning("LOG und TDMS weichen mindestens bei einem Signal ab.")
+    st.dataframe(
+        frame,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "LOG Median": st.column_config.NumberColumn(format="%.6f"),
+            "TDMS Median": st.column_config.NumberColumn(format="%.6f"),
+            "Mean Abs Diff": st.column_config.NumberColumn(format="%.6f"),
+            "Max Abs Diff": st.column_config.NumberColumn(format="%.6f"),
+        },
+    )
+
+
 st.title("DHTOL Analyzer")
 st.caption("Stresszeit, Nachbelastung, Fehler und Temperatur-Glitches")
 
-folder_path = st.sidebar.text_input(
-    "Testlauf-Ordner",
-    value="",
-    placeholder="/Users/name/Desktop/Testlauf",
+source_mode = st.sidebar.radio(
+    "Datenquelle",
+    ["Lokaler Ordner", "ZIP hochladen"],
+    help=(
+        "Lokal: Pfad auf diesem Rechner. Cloud: ZIP-Datei mit Testlauf-Daten "
+        "im Browser hochladen."
+    ),
 )
 
-if not folder_path.strip():
-    st.info("Testlauf-Ordner eingeben.")
-    st.stop()
+if source_mode == "ZIP hochladen":
+    uploaded_archive = st.sidebar.file_uploader(
+        "Testlauf-ZIP",
+        type=["zip"],
+        help="ZIP mit JSON, MTPX, DATA, Board-Logs, Host-Logs und optional TDMS.",
+    )
+    if uploaded_archive is None:
+        st.info("Testlauf-ZIP hochladen.")
+        st.stop()
+    try:
+        folder = extract_uploaded_zip(
+            uploaded_archive.getvalue(),
+            uploaded_archive.name,
+        )
+    except UploadedArchiveError as error:
+        st.error(str(error))
+        st.stop()
+else:
+    folder_path = st.sidebar.text_input(
+        "Testlauf-Ordner",
+        value="",
+        placeholder="/Users/name/Desktop/Testlauf",
+    )
+    if not folder_path.strip():
+        st.info("Testlauf-Ordner eingeben.")
+        st.stop()
 
-folder = Path(folder_path.strip()).expanduser()
-if not folder.is_dir():
-    st.error("Ordner nicht gefunden.")
-    st.stop()
+    folder = Path(folder_path.strip()).expanduser()
+    if not folder.is_dir():
+        st.error("Ordner nicht gefunden.")
+        st.stop()
 
 resolved_folder = str(folder.resolve())
 candidates = find_test_candidates(resolved_folder)
@@ -193,6 +305,30 @@ columns[3].metric("Nennstrom je Board", f"{run.slot_nenn_strom_a:g} A")
 
 for warning in run.warnings:
     st.warning(warning)
+
+boards_with_missing_logs = [
+    board
+    for board in run.all_boards
+    if board.missing_log_seconds > LOG_COVERAGE_WARNING_SECONDS
+]
+if boards_with_missing_logs:
+    missing_labels = [
+        (
+            f"Zone {board.zone.value}, Position {board.position}, "
+            f"{board.dut_name}: "
+            f"{board.missing_log_seconds / 3600:.2f} h fehlen – "
+            + (
+                "Host-/Zonenstrom vorhanden; Nachbelastung wird mit DATA berechnet"
+                if board.log_gap_current_confirmed is True
+                else "Nachbelastung wird trotzdem mit DATA berechnet"
+            )
+        )
+        for board in boards_with_missing_logs
+    ]
+    st.warning(
+        "Abweichung zwischen DATA und Board-Logs erkannt. "
+        + " · ".join(missing_labels)
+    )
 
 all_dates = sorted(
     {date for board in run.all_boards for date in available_board_dates(board)}
@@ -252,23 +388,90 @@ with overview_tab:
     st.caption(
         f"Temperatur-Glitch-Analyse automatisch · Prüftag: {glitch_analysis_date}"
     )
+    if boards_with_missing_logs:
+        affected_boards = [
+            (
+                f"Zone {board.zone.value} · Position {board.position} · "
+                f"{board.dut_name}: {board.missing_log_seconds / 3600:.2f} h "
+                "weniger Board-Logzeit als DATA"
+                + (
+                    " · Nachbelastung wird mit DATA berechnet"
+                    if board.log_gap_current_confirmed is True
+                    else " · Board-Log nur Kontrolle"
+                )
+            )
+            for board in boards_with_missing_logs
+        ]
+        st.warning(
+            "⚠ Betroffene Boards: " + " | ".join(affected_boards)
+        )
     overview = board_overview_frame(run, glitch_summary)
     st.dataframe(
         overview,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Log-Stresszeit [h]": st.column_config.NumberColumn(format="%.2f"),
-            "Rechnerische Nachbelastung [h]": st.column_config.NumberColumn(
+            "DATA-Stresszeit [h]": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Board-Log-Stresszeit [h]": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Abweichung DATA - Board-Logs [h]": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Nachbelastung laut DATA [h]": st.column_config.NumberColumn(
+                format="%.2f"
+            ),
+            "Nachbelastung laut Board-Log [h]": st.column_config.NumberColumn(
                 format="%.2f"
             ),
         },
     )
     st.plotly_chart(stress_time_chart(run), use_container_width=True)
     st.info(
-        "Rechnerische Nachbelastung = geplante Testzeit minus Log-Stresszeit. "
-        "Erst Stromprüfung bestätigt tatsächliche Nachbelastung."
+        "Nachbelastung wird mit DATA-Stresszeit pro DUT berechnet. "
+        "Board-Log-Zeit wird zusätzlich angezeigt, um Kommunikations- oder Logging-Lücken zu erkennen. "
+        "Host-/Zonenstrom ist nur eine Plausibilitätsprüfung."
     )
+    st.subheader("PDF-Testbericht")
+    engineer_notes = st.text_area(
+        "Engineer Notes",
+        value="",
+        placeholder="Optionale Bemerkungen fuer den Bericht",
+        key="pdf_engineer_notes",
+    )
+    report_state_key = f"pdf_report_{selected_run_id}_{date_scope}"
+    if st.button("PDF-Bericht erstellen", key="build_pdf_report"):
+        try:
+            with st.spinner("PDF-Bericht wird erstellt ..."):
+                report_charts = build_report_charts(run, date_scope)
+                report_bytes = build_pdf_report(
+                    run=run,
+                    overview_frame=overview,
+                    period_label=period_label,
+                    glitch_summary=glitch_summary,
+                    engineer_notes=engineer_notes,
+                    charts=report_charts,
+                    folder_path=resolved_folder,
+                )
+            st.session_state[report_state_key] = {
+                "bytes": report_bytes,
+                "filename": pdf_report_filename(run.test_name, date_scope),
+            }
+            st.success("PDF-Bericht bereit.")
+        except PdfReportError as error:
+            st.error(str(error))
+
+    report_payload = st.session_state.get(report_state_key)
+    if report_payload:
+        st.download_button(
+            "PDF-Bericht herunterladen",
+            data=report_payload["bytes"],
+            file_name=report_payload["filename"],
+            mime="application/pdf",
+            key=f"download_{report_state_key}",
+        )
 
 with board_tab:
     board_labels = {"Alle Boards": None}
@@ -368,6 +571,27 @@ with board_tab:
             f"Zeitraum: {period_label} · "
             f"verfügbare Board-Tage: {len(selected_dates)}"
         )
+        if st.button(
+            "TDMS gegen Board-Log prüfen",
+            key=f"tdms_board_{selected_board.dut_name}_{date_scope}",
+        ):
+            if date_scope == "__all__":
+                st.warning("Bitte bestimmten Tag auswählen.")
+            else:
+                board_log_path = _date_log_path(selected_board.log_paths, date_scope)
+                if board_log_path is None:
+                    st.warning("Kein Board-Log für diesen Tag gefunden.")
+                else:
+                    mqtt_tdms_path = _tdms_path_from_board_log(
+                        board_log_path, selected_board.dut_name, date_scope
+                    )
+                    with st.spinner("TDMS wird mit Board-Log verglichen …"):
+                        tdms_result = compare_board_log_to_tdms_cached(
+                            _path_signature(board_log_path),
+                            _path_signature(mqtt_tdms_path),
+                            selected_board.hw_target,
+                        )
+                    _render_tdms_comparison(tdms_result)
         if st.checkbox(
             "Board-Messdaten laden",
             key="load_board_detail",
@@ -461,13 +685,42 @@ with board_tab:
 with current_tab:
     zone_names = [zone.zone.value for zone in run.zones]
     selected_zone = st.selectbox("Zone", zone_names)
+    selected_zone_data = next(
+        (zone for zone in run.zones if zone.zone.value == selected_zone), None
+    )
     instrument = st.radio(
         "Instrument", ["PSU + EL", "PSU", "EL"], horizontal=True
     )
+    if st.button(
+        "TDMS gegen Host-Log prüfen",
+        key=f"tdms_zone_{selected_zone}_{date_scope}",
+    ):
+        if date_scope == "__all__":
+            st.warning("Bitte bestimmten Tag auswählen.")
+        elif selected_zone_data is None:
+            st.warning("Zone nicht gefunden.")
+        else:
+            host_log_path = _date_log_path(selected_zone_data.host_log_paths, date_scope)
+            if host_log_path is None:
+                st.warning("Kein Host-Log für diesen Tag gefunden.")
+            else:
+                psu_tdms_path = _tdms_path_from_host_log(
+                    host_log_path, date_scope, "psu12"
+                )
+                el_tdms_path = _tdms_path_from_host_log(
+                    host_log_path, date_scope, "el12"
+                )
+                with st.spinner("TDMS wird mit Host-Log verglichen …"):
+                    tdms_result = compare_host_current_to_tdms_cached(
+                        _path_signature(host_log_path),
+                        _path_signature(psu_tdms_path),
+                        _path_signature(el_tdms_path),
+                    )
+                _render_tdms_comparison(tdms_result)
     if st.checkbox(
         "Zonenstrom laden",
         key="load_zone_current",
-        help="Lädt PSU/EL-Strom für alle gruppierten Tage oder den ausgewählten Tag.",
+        help="Lädt Host-LOG-Strom für alle gruppierten Tage oder den ausgewählten Tag.",
     ):
         current = analyze_zone_current(
             resolved_folder,

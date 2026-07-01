@@ -44,7 +44,7 @@ stress pendant cette periode.
 
 - Semaine 1 : modeles de donnees et configuration - termine
 - Semaine 2 : parseurs JSON, MTPX et DATA - termine
-- Semaine 3 : parseurs LOG/TDMS et analyse
+- Semaine 3 : parseurs LOG et analyse
 - Semaine 4 : interface Streamlit, graphes et tests globaux
 
 Les donnees brutes restent locales et ne sont pas envoyees grace a `.gitignore`.

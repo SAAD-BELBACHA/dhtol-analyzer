@@ -10,6 +10,7 @@ from visualization.charts import (
     all_board_voltage_chart,
     electrical_chart,
 )
+from visualization.overview import board_overview_frame
 from visualization.glitch_view import (
     all_board_temperature_chart,
     temperature_sensor_labels,
@@ -196,3 +197,70 @@ def test_board_comparison_aligns_on_stress_start() -> None:
         0.0,
         1 / 60,
     ]
+
+
+def test_overview_uses_data_for_nachbelastung_and_shows_board_log_gap() -> None:
+    from models.data_models import Board, TestRun, Zone, ZoneData
+
+    board = Board(
+        controller_id=58,
+        zone=Zone.A,
+        position=1,
+        dut_name="58_1_2",
+        hw_target="target58",
+        nenn_strom_a=2.0,
+        available_log_seconds=6 * 3600,
+        log_stress_seconds=8 * 3600,
+        log_gap_current_confirmed=False,
+    )
+    run = TestRun(
+        test_name="run",
+        planned_test_seconds=10 * 3600,
+        oven_temp_setpoint_c=25.0,
+        slot_nenn_strom_a=2.0,
+        zones=[ZoneData(zone=Zone.A, boards=[board])],
+    )
+
+    row = board_overview_frame(run).iloc[0]
+
+    assert row["DATA-Stresszeit [h]"] == 8.0
+    assert row["Board-Log-Stresszeit [h]"] == 6.0
+    assert row["Abweichung DATA - Board-Logs [h]"] == 2.0
+    assert row["Strombestätigung"] == "Nicht bestätigt"
+    assert row["Hinweis"] == "⚠ 2.00 h weniger Board-Logzeit als DATA · Strom nicht bestätigt"
+    assert row["Nachbelastung laut DATA [h]"] == 2.0
+    assert row["Nachbelastung laut Board-Log [h]"] == 4.0
+    assert row["Status"] == "Gelb"
+
+
+def test_overview_keeps_data_nachbelastung_when_current_confirms_gap() -> None:
+    from models.data_models import Board, TestRun, Zone, ZoneData
+
+    board = Board(
+        controller_id=58,
+        zone=Zone.A,
+        position=1,
+        dut_name="58_1_2",
+        hw_target="target58",
+        nenn_strom_a=2.0,
+        available_log_seconds=6 * 3600,
+        log_stress_seconds=8 * 3600,
+        log_gap_current_confirmed=True,
+    )
+    run = TestRun(
+        test_name="run",
+        planned_test_seconds=10 * 3600,
+        oven_temp_setpoint_c=25.0,
+        slot_nenn_strom_a=2.0,
+        zones=[ZoneData(zone=Zone.A, boards=[board])],
+    )
+
+    row = board_overview_frame(run).iloc[0]
+
+    assert row["DATA-Stresszeit [h]"] == 8.0
+    assert row["Board-Log-Stresszeit [h]"] == 6.0
+    assert row["Strombestätigung"] == "Bestätigt"
+    assert row["Hinweis"] == "⚠ 2.00 h weniger Board-Logzeit als DATA · Nachbelastung mit DATA"
+    assert row["Nachbelastung laut DATA [h]"] == 2.0
+    assert row["Nachbelastung laut Board-Log [h]"] == 4.0
+    assert row["Status"] == "Gelb"

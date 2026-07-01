@@ -12,6 +12,11 @@ __pycache__/
 .DS_Store
 Screenshot *.png
 
+# Generated/local artifacts
+/tmp/
+/output/pdf/*.pdf
+*.zip
+
 # Environment files
 .env
 .env.*

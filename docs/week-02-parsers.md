@@ -338,7 +338,7 @@ Campagne de test
 C'est la base pour la semaine 3 :
 
 - lire les logs board
-- lire les donnees de courant TDMS
+- lire les donnees de courant depuis les logs host
 - detecter les erreurs
 - analyser les glitches de temperature
 - confirmer le vrai post-stress via chute de courant

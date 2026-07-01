@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import mmap
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -176,6 +177,81 @@ def parse_board_logs(paths: Iterable[str | Path]) -> BoardLogResult:
         frame = frame.sort_values("timestamp").drop_duplicates("timestamp")
         frame = frame.reset_index(drop=True)
     return BoardLogResult(measurements=frame, events=events, skipped_lines=skipped)
+
+
+def measurement_time_bounds(
+    path: str | Path,
+) -> tuple[datetime, datetime] | None:
+    source = Path(path)
+    try:
+        handle = source.open("rb")
+    except OSError:
+        return None
+
+    with handle:
+        try:
+            if source.stat().st_size == 0:
+                return None
+            content = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+        except (OSError, ValueError):
+            return None
+
+        with content:
+            first: datetime | None = None
+            position = 0
+            while position < len(content):
+                line_end = content.find(b"\n", position)
+                if line_end < 0:
+                    line_end = len(content)
+                raw_line = content[position:line_end].decode(
+                    "utf-8", errors="replace"
+                )
+                split = _split_line(raw_line)
+                if split is not None and _is_measurement(split[1]):
+                    try:
+                        first = datetime.fromisoformat(split[0])
+                    except ValueError:
+                        first = None
+                    if first is not None:
+                        break
+                position = line_end + 1
+
+            if first is None:
+                return None
+
+            last: datetime | None = None
+            position = len(content)
+            while position > 0:
+                line_start = content.rfind(
+                    b"\n", 0, max(0, position - 1)
+                )
+                raw_line = content[line_start + 1 : position].decode(
+                    "utf-8", errors="replace"
+                )
+                split = _split_line(raw_line)
+                if split is not None and _is_measurement(split[1]):
+                    try:
+                        last = datetime.fromisoformat(split[0])
+                    except ValueError:
+                        last = None
+                    if last is not None:
+                        break
+                position = line_start if line_start >= 0 else 0
+
+    if last is None or last < first:
+        return None
+    return first, last
+
+
+def available_log_seconds(paths: Iterable[str | Path]) -> float:
+    total_seconds = 0.0
+    for path in paths:
+        bounds = measurement_time_bounds(path)
+        if bounds is None:
+            continue
+        first, last = bounds
+        total_seconds += max(0.0, (last - first).total_seconds())
+    return total_seconds
 
 
 def parse_board_logs_for_plot(
